@@ -16,7 +16,7 @@ function Login(): React.ReactElement {
 		>
 			<header className="flex items-center justify-between px-16 py-6">
 				<Link to="/" className="flex items-center gap-3">
-					<Logo size={40} showText variant="dark" />
+					<Logo showText variant="dark" />
 				</Link>
 				<div className="flex items-center gap-4">
 					<span className="text-gray-500">Don't have an account?</span>
