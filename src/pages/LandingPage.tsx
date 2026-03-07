@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
-import { FoxIcon as FoxLogo } from "../components/Logo";
+import Logo, { FoxIcon as FoxLogo } from "../components/Logo";
 
 interface ParticlePosition {
     left: number;
@@ -109,12 +109,12 @@ function LandingPage(): React.ReactElement {
         <div
             className="min-h-screen overflow-hidden relative"
             style={{
-                fontFamily: "'Cormorant Garamond', serif",
+                fontFamily: "'Outfit', sans-serif",
                 background:
                     "linear-gradient(135deg, #ffffff 0%, #faf8f5 50%, #ffffff 100%)",
             }}
         >
-            <motion.div
+            {/* <motion.div
                 className="fixed w-[250px] h-[250px] rounded-full pointer-events-none"
                 style={{
                     background:
@@ -131,7 +131,7 @@ function LandingPage(): React.ReactElement {
                     repeat: Infinity,
                     ease: "easeInOut",
                 }}
-            />
+            /> */}
 
             <div className="fixed inset-0 pointer-events-none">
                 {particlePositions.map(renderParticle)}
@@ -142,15 +142,9 @@ function LandingPage(): React.ReactElement {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.8 }}
-                    className="flex items-center gap-3"
+                    className="flex items-center"
                 >
-                    <FoxLogo />
-                    <span
-                        className="text-3xl font-light tracking-[0.3em]"
-                        style={{ color: "#ff8c00" }}
-                    >
-                        FLOWFOX
-                    </span>
+                    <Logo showText variant="dark" />
                 </motion.div>
                 <motion.div
                     initial={{ opacity: 0, x: 20 }}
@@ -191,7 +185,7 @@ function LandingPage(): React.ReactElement {
                 </motion.div>
             </nav>
 
-            <main className="relative z-10 flex flex-col items-center justify-center min-h-[80vh] px-16">
+            <main className="relative z-10 flex flex-col items-center justify-center min-h-[40vh] px-16">
                 <motion.div
                     initial={{ opacity: 0, y: 40 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -216,8 +210,8 @@ function LandingPage(): React.ReactElement {
                         className="text-xl font-light tracking-wide max-w-2xl mx-auto mb-12"
                         style={{ fontFamily: "'Outfit', sans-serif", color: "#666" }}
                     >
-                        Connect your apps. Build powerful workflows. Let FlowFox handle the
-                        complexity while you focus on what matters.
+                        Clever as a fox, easy as drag-and-drop.
+                        The complete visual programming environment for productivity prosumers.
                     </p>
                 </motion.div>
 
@@ -254,7 +248,7 @@ function LandingPage(): React.ReactElement {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 1, delay: 0.8 }}
-                    className="absolute bottom-12 flex gap-8"
+                    className="absolute top-150 flex gap-8"
                 >
                     {SERVICE_ICONS.map(renderServiceIcon)}
                 </motion.div>
