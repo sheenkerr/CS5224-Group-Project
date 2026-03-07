@@ -13,13 +13,13 @@ function App(): React.ReactElement {
 	return (
 		<ClerkProvider
 			publishableKey={PUBLISHABLE_KEY}
-			afterSignOutUrl="/"
-			signInUrl="/login"
-			signUpUrl="/register"
-			signInFallbackRedirectUrl="/dashboard"
-			signUpFallbackRedirectUrl="/dashboard"
+			afterSignOutUrl={import.meta.env.BASE_URL}
+			signInUrl={`${import.meta.env.BASE_URL}login`}
+			signUpUrl={`${import.meta.env.BASE_URL}register`}
+			signInFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
+			signUpFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
 		>
-			<Router>
+			<Router basename={import.meta.env.BASE_URL}>
 				<Routes>
 					<Route path="/" element={<LandingPage />} />
 					<Route path="/login/*" element={<Login />} />
