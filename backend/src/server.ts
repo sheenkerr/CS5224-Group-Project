@@ -11,12 +11,10 @@ const PORT = process.env.PORT ?? 4000;
 
 const log = createLogger("Server");
 
-// app.use(
-//   cors({
-//     origin: process.env.FRONTEND_URL ?? "http://localhost:5173",
-//     credentials: true,
-//   })
-// );
+app.use(cors({
+  origin: 'http://localhost:4000', // Your exact React frontend URL
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
+}));
 
 // Parse JSON request bodies
 app.use(express.json());
@@ -25,6 +23,7 @@ app.use("/api", apiRouter);
 const server = app.listen(PORT, () => {
   log.info(`Server running on http://localhost:${PORT}`);
 });
+
 
 process.on("SIGINT", () => {
   server.close(() => {
