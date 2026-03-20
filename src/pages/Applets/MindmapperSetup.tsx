@@ -1,4 +1,5 @@
 import React from "react";
+import axios from "axios";
 import SetupPannel from "../../components/SetupPannel";
 import Navigation from "../../components/Navigation";
 import { Button, Dialog } from "@mui/material";
@@ -11,6 +12,12 @@ function MindmapperSetup(): React.ReactElement {
         setOpen(false);
     };
 
+    const googleLogin = async () => {
+        const response = await axios.get("http://localhost:8001/api/mindmapper/google/login-url");
+        const authUrl = response.data.authUrl;
+        window.location.href = authUrl;
+    }
+
     // Set up content for the setup panel
     const steps = ['Give access to google drive', 'Select a google drive folder'];
     const isOptional = [false, false];
@@ -22,7 +29,7 @@ function MindmapperSetup(): React.ReactElement {
                 </p>
             </div>
             <button
-                onClick={() => {/* handle login */ }}
+                onClick={googleLogin}
                 className="flex items-center gap-2 self-start px-5 py-2.5 rounded-lg bg-white dark:bg-white/10 border border-gray-200 dark:border-white/15 text-gray-800 dark:text-white text-sm font-medium shadow-sm hover:shadow-md hover:bg-gray-50 dark:hover:bg-white/15 transition-all duration-200"
             >
                 <img
