@@ -6,7 +6,7 @@ import Applets from "./pages/Applets";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
-import Mindmapper from "./pages/Applets/MindmapperSetup";
+import Mindmapper from "./pages/Applets/Mindmapper/MindmapperSetup";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "";
 

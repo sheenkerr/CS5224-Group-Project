@@ -1,7 +1,7 @@
 import React from "react";
 import axios from "axios";
-import SetupPannel from "../../components/SetupPannel";
-import Navigation from "../../components/Navigation";
+import SetupPannel from "../../../components/SetupPannel";
+import Navigation from "../../../components/Navigation";
 import { Button, Dialog } from "@mui/material";
 
 function MindmapperSetup(): React.ReactElement {
