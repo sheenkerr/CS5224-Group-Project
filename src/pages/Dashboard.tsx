@@ -190,7 +190,13 @@ function Dashboard(): React.ReactElement | null {
                 transition={{ delay: index * 0.03 }}
                 className="bg-white dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden hover:border-[#ff6b35]/50 dark:hover:border-[#ff6b35]/50 transition-colors group shadow-sm dark:shadow-none"
             >
-                <div className="p-4" onClick={() => navigate(`/applets/${applet.name}`)}>
+                <div className="p-4" onClick={() => {
+                    if (applet.name === "Mindmappers") {
+                        navigate(`/applets/${applet.name}/setup`);
+                    } else {
+                        navigate(`/applets/${applet.name}`);
+                    }
+                }}>
                     <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-2">
                             <div

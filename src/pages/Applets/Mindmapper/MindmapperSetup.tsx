@@ -2,9 +2,13 @@ import React from "react";
 import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
 import Navigation from "../../../components/Navigation";
-import { Button, Dialog } from "@mui/material";
+import { Dialog } from "@mui/material";
 
-function MindmapperSetup(): React.ReactElement {
+type MindmapperSetupProps = {
+    stage: number;
+}
+
+function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElement {
 
     const [open, setOpen] = React.useState(true);
 
@@ -57,14 +61,11 @@ function MindmapperSetup(): React.ReactElement {
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-transparent dark:bg-linear-to-br dark:from-[#0f0f1a] dark:to-[#16213e] font-sans transition-colors">
-            <Navigation />
-            <main className="max-w-7xl mx-auto px-6 py-8">
-                <Dialog open={open}>
-                    <SetupPannel steps={steps} stepsContent={stepsContent} isOptional={isOptional} onComplete={completeSteup} />
-                </Dialog>
-            </main>
-        </div>
+        <main className="max-w-7xl mx-auto px-6 py-8">
+            <Dialog open={open}>
+                <SetupPannel steps={steps} stepsContent={stepsContent} isOptional={isOptional} currentStep={stage} onComplete={completeSteup} />
+            </Dialog>
+        </main>
     );
 }
 

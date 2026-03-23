@@ -10,13 +10,14 @@ type SetupPanelProps = {
     steps: string[];
     stepsContent: React.ReactNode[];
     isOptional: boolean[];
+    currentStep: number;
     onComplete: () => void;
 };
 
 
-function SetupPannel({ steps, stepsContent, isOptional, onComplete }: SetupPanelProps): React.ReactElement {
+function SetupPannel({ steps, stepsContent, isOptional, currentStep = 0, onComplete }: SetupPanelProps): React.ReactElement {
 
-    const [activeStep, setActiveStep] = React.useState(0);
+    const [activeStep, setActiveStep] = React.useState(currentStep);
     const [skipped, setSkipped] = React.useState(new Set<number>());
 
     const isStepOptional = (step: number) => {
