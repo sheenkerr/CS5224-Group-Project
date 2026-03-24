@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import { randomUUID } from "crypto";
 import oauth2Client from "../../../middlewares/googleAuthMiddleware";
 import { createLogger } from "../../../utils/logger";
+import { processNewFiles } from "./fileProcessingController";
 
 const log = createLogger("Mindmapper");
 
@@ -77,6 +78,7 @@ export async function setupDriveWatch(folderId: string, folderName: string) {
     if (!webhookBase) {
         throw new Error("GOOGLE_WEBHOOK_BASE_URL is not defined");
     }
+
     // This just links to our backend endpoint
     const webhookAddress = `${webhookBase}/api/mindmapper/google/drive-webhook`;
 
@@ -96,7 +98,7 @@ export async function setupDriveWatch(folderId: string, folderName: string) {
         throw new Error("Drive watch did not respond with a resourceId");
     };
 
-    // Store channel state in memory
+    // Store channel state in memory (Change this to a database)
     activeChannel = {
         channelId,
         resourceId,
@@ -114,51 +116,22 @@ export async function setupDriveWatch(folderId: string, folderName: string) {
  * Google always expects a 200 response quickly, so do the heavy lifting async.
  */
 export async function handleDriveWebhook(headers: Record<string, string | string[] | undefined>) {
+    // These are the params google uses
     const channelId = headers["x-goog-channel-id"] as string;
     const resourceState = headers["x-goog-resource-state"] as string;
 
-    // "sync" fires immediately after watch registration — safe to ignore
+    // "sync" fires immediately after watch registration
     if (resourceState === "sync") {
         log.info(`Drive webhook: sync ping received for channel ${channelId} — ignored`);
         return;
     }
 
+    // Change this part to check with the database
     if (!activeChannel || channelId !== activeChannel.channelId) {
         log.warn(`Drive webhook: received notification for unknown channel ${channelId}`);
         return;
     }
 
     log.info(`Drive webhook: change detected (state: ${resourceState})`);
-
-    const drive = google.drive({ version: "v3", auth: oauth2Client });
-
-    // Fetch the actual list of changes since the last page token
-    const changesRes = await drive.changes.list({
-        pageToken: activeChannel.pageToken,
-        fields: "newStartPageToken, changes(fileId, file(name, mimeType, parents, trashed))",
-    });
-
-    // Advance the page token so next notification starts from here
-    if (changesRes.data.newStartPageToken) {
-        activeChannel.pageToken = changesRes.data.newStartPageToken;
-    }
-
-    const changes = changesRes.data.changes ?? [];
-    const watchedFolderId = activeChannel.folderId;
-
-    for (const change of changes) {
-        const file = change.file;
-
-        // Skip trashed files and folders themselves
-        if (!file || file.trashed || file.mimeType === "application/vnd.google-apps.folder") {
-            continue;
-        };
-
-        const parents = file.parents ?? [];
-        // Ensure that what we have is indeed a file in the watched folder
-        if (parents.includes(watchedFolderId)) {
-            log.info(`New file detected in watched folder "${activeChannel.folderName}": ${file.name} (id: ${change.fileId})`);
-            // TODO: trigger mind-map processing here
-        }
-    }
+    processNewFiles(activeChannel.pageToken, activeChannel.folderId, activeChannel.folderName);
 }

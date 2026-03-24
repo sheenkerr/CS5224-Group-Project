@@ -41,6 +41,7 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         });
 
         if (response.data.success) {
+            // TODO: Redirect to the mindmapper page not the setup page but this required the database as I need the unique id for the mindmapper setup
             setOpen(false);
         } else {
             // Show an error message
@@ -58,7 +59,7 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         setPickerLoading(true);
         setOpen(false);
         try {
-            // 1. Fetch access token and API key from the backend
+            // Fetch access token and API key from the backend
             const [tokenRes, apiKeyRes] = await Promise.all([
                 axios.get("http://localhost:8001/api/mindmapper/google/access-token"),
                 axios.get("http://localhost:8001/api/mindmapper/google/api-key"),
@@ -67,15 +68,15 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
             const accessToken: string = tokenRes.data.access_token;
             const apiKey: string = apiKeyRes.data.apiKey;
 
-            // 2. Load the Google API client library
+            // Load the Google API client library
             await loadScript("https://apis.google.com/js/api.js");
 
-            // 3. Load the Picker API
+            // Load the Picker API
             await new Promise<void>((resolve) => {
                 (window as any).gapi.load("picker", { callback: resolve });
             });
 
-            // 4. Build and display the picker (folders only)
+            // Build and display the picker (folders only)
             const google = (window as any).google;
             const picker = new google.picker.PickerBuilder()
                 .addView(
