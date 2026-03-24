@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getGoogleLoginUrl, handleGoogleCallback } from "./controllers/googleController";
+import { getGoogleLoginUrl, handleGoogleCallback, getGoogleAccessToken, getGoogleClientId, setupDriveWatch, handleDriveWebhook } from "./controllers/googleController";
 import { createLogger } from "../../utils/logger";
 
 const router = Router();
@@ -25,6 +25,65 @@ router.get("/google/callback", async (req, res) => {
     const redirectTarget = `${frontendUrl}/applets/Mindmappers/setup?success=${result}`;
 
     res.redirect(redirectTarget);
+});
+
+router.get("/google/client-id", (req, res) => {
+    const clientId = getGoogleClientId();
+    res.status(200).json({ clientId });
+});
+
+/** Return the client key for use with Google Picker */
+router.get("/google/api-key", async (req, res) => {
+
+    res.status(200).json({ apiKey: process.env.GOOGLE_API_KEY });
+});
+
+/** Return the stored OAuth access token for use with Google Picker */
+router.get("/google/access-token", (req, res) => {
+    const token = getGoogleAccessToken();
+
+    if (!token) {
+        return res.status(401).json({ error: "Not authenticated with Google" });
+    }
+
+    res.status(200).json({ access_token: token });
+});
+
+/** Register a Google Drive watch channel for the selected folder */
+router.post("/google/setup-listener", async (req, res) => {
+    const { folderId, folderName } = req.body;
+
+    if (!folderId || !folderName) {
+        res.status(400).json({
+            success: false,
+            error: "No folder was selected"
+        });
+        return;
+    }
+
+    try {
+        await setupDriveWatch(folderId, folderName);
+        res.status(200).json({
+            message: "Drive watch registered",
+            success: true
+        });
+    } catch (err: any) {
+        log.error(`Failed to set up Drive watch: ${err.message}`);
+        res.status(500).json({
+            error: err.message,
+            success: false
+        });
+    }
+});
+
+/**
+ * Webhook endpoint — Google POSTs here whenever a Drive change happens.
+ * Must respond 200 quickly; processing happens asynchronously.
+ */
+router.post("/google/drive-webhook", (req, res) => {
+    res.sendStatus(200);
+    handleDriveWebhook(req.headers as Record<string, string | string[] | undefined>)
+        .catch((err) => log.error(`Error handling Drive webhook: ${err.message}`));
 });
 
 export default router;
