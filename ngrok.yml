@@ -1,0 +1,17 @@
+# FlowFox Ngrok Configuration
+# This file configures ngrok tunneling for local development
+#
+# Usage:
+# - Add NGROK_AUTH_TOKEN to backend/.env
+# - The ngrok service will tunnel traffic to the backend service
+# - Access the ngrok web interface at http://localhost:8001
+
+version: "2"
+authtoken: ${NGROK_AUTH_TOKEN}
+
+tunnels:
+  backend:
+    proto: http
+    addr: backend:4000
+    inspect: true
+    bind_tls: true
