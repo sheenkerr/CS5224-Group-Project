@@ -8,7 +8,7 @@
 //   npx ts-node src/applets/mindmapper/test-extract.ts
 // ─────────────────────────────────────────────
 
-import { extractGraph } from "./extract.js";
+import { extractGraph } from "./extract";
 
 const SAMPLE_DOCUMENT = `
 Albert Einstein was a German-born theoretical physicist who developed the theory of relativity, 

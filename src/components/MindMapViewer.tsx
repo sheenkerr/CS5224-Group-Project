@@ -52,7 +52,7 @@ function buildLayout(graphNodes: GraphNode[]): Node[] {
         y: row * spacing + jitterY,
       },
       style: {
-        background: TYPE_COLORS[n.type || "other"],
+        background: TYPE_COLORS[n.type ?? "other"] ?? TYPE_COLORS["other"],
         color: "#fff",
         border: "none",
         borderRadius: "50%",

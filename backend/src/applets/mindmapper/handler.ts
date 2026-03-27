@@ -1,127 +1,89 @@
-// ─────────────────────────────────────────────
-// handler.ts
-// ─────────────────────────────────────────────
+import { Router } from "express";
+import { getGoogleLoginUrl, handleGoogleCallback, getGoogleAccessToken, getGoogleClientId, setupDriveWatch, handleDriveWebhook } from "./controllers/googleController";
+import { createLogger } from "../../utils/logger";
 
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { extractGraph } from "./extract.js";
-import { saveMindMap, getMindMap, getAllMindMaps, getMergedGraph } from "./graph.js";
-import { ExtractRequest } from "./types.js";
+const router = Router();
+const log = createLogger("Mindmapper");
 
-// Helper to return response
-const response = (statusCode: number, body: object): APIGatewayProxyResult => ({
-  statusCode,
-  body: JSON.stringify(body),
+/** Check that the routes are loaded properly */
+router.get("/", (req, res) => {
+    res.status(200).json({ message: "Mindmapper routes are imported" });
 });
 
-// Main Lambda handler
-export const handler = async (
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
-  try {
-    const method = event.httpMethod;
-    const path = event.path;
+router.get("/google/login-url", (req, res) => {
+    const authUrl = getGoogleLoginUrl();
 
-    // ─────────────────────────────────────────────
-    // POST /api/mindmapper/extract
-    // ─────────────────────────────────────────────
-    if (method === "POST" && path.includes("/extract")) {
-      const body: ExtractRequest = JSON.parse(event.body || "{}");
+    res.status(200).json({ authUrl });
+});
 
-      const {
-        userId,
-        documentId,
-        documentName,
-        documentText,
-        extractionPrompt,
-        apiKey,
-      } = body;
+/** Callback for google to send us data */
+router.get("/google/callback", async (req, res) => {
 
-      // Validation
-      if (!userId || !documentId || !documentName || !documentText) {
-        return response(400, {
-          success: false,
-          error:
-            "userId, documentId, documentName, and documentText are required.",
+    const result = await handleGoogleCallback(req);
+
+    const frontendUrl = process.env.FRONTEND_URL;
+    const redirectTarget = `${frontendUrl}/applets/Mindmappers/setup?success=${result}`;
+
+    res.redirect(redirectTarget);
+});
+
+router.get("/google/client-id", (req, res) => {
+    const clientId = getGoogleClientId();
+    res.status(200).json({ clientId });
+});
+
+/** Return the client key for use with Google Picker */
+router.get("/google/api-key", async (req, res) => {
+
+    res.status(200).json({ apiKey: process.env.GOOGLE_API_KEY });
+});
+
+/** Return the stored OAuth access token for use with Google Picker */
+router.get("/google/access-token", (req, res) => {
+    const token = getGoogleAccessToken();
+
+    if (!token) {
+        return res.status(401).json({ error: "Not authenticated with Google" });
+    }
+
+    res.status(200).json({ access_token: token });
+});
+
+/** Register a Google Drive watch channel for the selected folder */
+router.post("/google/setup-listener", async (req, res) => {
+    const { folderId, folderName } = req.body;
+
+    if (!folderId || !folderName) {
+        res.status(400).json({
+            success: false,
+            error: "No folder was selected"
         });
-      }
-
-      // 1. Extract graph from LLM
-      const graph = await extractGraph(
-        documentText,
-        extractionPrompt || "key concepts and how they relate to each other",
-        apiKey
-      );
-
-      // 2. Save to DynamoDB
-      await saveMindMap(
-        userId,
-        documentId,
-        documentName,
-        graph,
-        extractionPrompt || "key concepts"
-      );
-
-      return response(200, {
-        success: true,
-        documentId,
-        graph,
-      });
+        return;
     }
 
-    if (method === "GET" && path.includes("/merged")) {
-  const userId = event.pathParameters?.userId;
-  const graph = await getMergedGraph(userId!);
-  return response(200, { success: true, graph });
-}
-
-    // ─────────────────────────────────────────────
-    // GET /api/mindmapper/{userId}/{documentId}
-    // ─────────────────────────────────────────────
-    if (method === "GET" && event.pathParameters?.documentId) {
-      const { userId, documentId } = event.pathParameters;
-
-      const record = await getMindMap(userId!, documentId!);
-
-      if (!record) {
-        return response(404, {
-          success: false,
-          error: "Not found.",
+    try {
+        await setupDriveWatch(folderId, folderName);
+        res.status(200).json({
+            message: "Drive watch registered",
+            success: true
         });
-      }
-
-      return response(200, {
-        success: true,
-        record,
-      });
+    } catch (err: any) {
+        log.error(`Failed to set up Drive watch: ${err.message}`);
+        res.status(500).json({
+            error: err.message,
+            success: false
+        });
     }
+});
 
-    // ─────────────────────────────────────────────
-    // GET /api/mindmapper/{userId}
-    // ─────────────────────────────────────────────
-    if (method === "GET" && event.pathParameters?.userId) {
-      const { userId } = event.pathParameters;
+/**
+ * Webhook endpoint — Google POSTs here whenever a Drive change happens.
+ * Must respond 200 quickly; processing happens asynchronously.
+ */
+router.post("/google/drive-webhook", (req, res) => {
+    res.sendStatus(200);
+    handleDriveWebhook(req.headers as Record<string, string | string[] | undefined>)
+        .catch((err) => log.error(`Error handling Drive webhook: ${err.message}`));
+});
 
-      const records = await getAllMindMaps(userId!);
-
-      return response(200, {
-        success: true,
-        records,
-      });
-    }
-
-    // Fallback
-    return response(404, {
-      success: false,
-      error: "Route not found",
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[mindmapper] Error:", message);
-
-    return response(500, {
-      success: false,
-      error: message,
-    });
-  }
-  
-};
+export default router;

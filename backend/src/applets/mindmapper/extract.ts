@@ -1,13 +1,13 @@
 import dotenv from "dotenv";
 dotenv.config();
 import Groq from "groq-sdk";
-import type { MindMap } from "./types.js";
+import type { MindMap } from "./types";
 
 const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function extractGraph(
   documentText: string,
-  extractionPrompt: string = "key concepts and how they relate to each other",
+  extractionPrompt: string = "key concepts, people, organizations and ALL relationships between them, including indirect relationships",
   userApiKey?: string
 ): Promise<MindMap> {
   const response = await client.chat.completions.create({
@@ -34,6 +34,9 @@ Rules:
 - label must be 1-4 words
 - type is one of: concept, person, event, place, other
 - Extract 5-15 nodes maximum
+- Create edges between ALL related nodes, not just connections to the main topic
+- Include indirect relationships e.g. if A causes B and B causes C, add an edge from A to C too
+- Every node should have at least one edge
 - Return ONLY the JSON
 
 Document:

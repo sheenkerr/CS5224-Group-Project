@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { saveMindMap, getMindMap } from "./graph.js";
+import { saveMindMap, getMindMap } from "./graph";
 
 async function main() {
   console.log("Testing DynamoDB...\n");
