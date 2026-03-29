@@ -1,47 +1,181 @@
-name: Deploy React app to GitHub Pages
+name: Deploy
 
 on:
   push:
-    branches: ["main", "master"]
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy.yml"
+      - "backend/**"
+      - "src/**"
+      - "eslint.config.js"
+      - "index.html"
+      - "package-lock.json"
+      - "package.json"
+      - "tsconfig.app.json"
+      - "tsconfig.json"
+      - "tsconfig.node.json"
+      - "vite.config.ts"
   workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - frontend
+          - backend
 
 permissions:
   contents: read
-  pages: write
   id-token: write
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  changes:
+    name: Detect Deploy Targets
     runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.target == 'all' || github.event.inputs.target == 'frontend') && 'true' || github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.frontend }}
+      backend: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.target == 'all' || github.event.inputs.target == 'backend') && 'true' || github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.backend }}
     steps:
-      - name: Checkout
+      - name: Checkout code
+        if: github.event_name == 'push'
         uses: actions/checkout@v4
-      - name: Setup Node
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed areas
+        if: github.event_name == 'push'
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ github.ref }}
+          filters: |
+            frontend:
+              - '.github/workflows/deploy.yml'
+              - 'src/**'
+              - 'eslint.config.js'
+              - 'index.html'
+              - 'package-lock.json'
+              - 'package.json'
+              - 'tsconfig.app.json'
+              - 'tsconfig.json'
+              - 'tsconfig.node.json'
+              - 'vite.config.ts'
+            backend:
+              - '.github/workflows/deploy.yml'
+              - 'backend/**'
+
+  deploy-frontend:
+    name: Build & Deploy Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_PAGER: ""
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      CF_DIST_ID: ${{ vars.CF_DIST_ID }}
+      S3_CDN_BUCKET: ${{ vars.S3_CDN_BUCKET }}
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      VITE_CLOUDFRONT_URL: ${{ vars.VITE_CLOUDFRONT_URL }}
+      VITE_CUSTOM_DOMAIN: ${{ vars.VITE_CUSTOM_DOMAIN }}
+    steps:
+      - name: Checkout frontend files
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            src
+            index.html
+            package-lock.json
+            package.json
+            tsconfig.app.json
+            tsconfig.json
+            tsconfig.node.json
+            vite.config.ts
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: "npm"
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
       - name: Install dependencies
         run: npm ci
-      - name: Build
+
+      - name: Build frontend
         run: npm run build
-        env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-      - name: Create 404 for Client Side Routing
-        run: cp dist/index.html dist/404.html
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          path: "./dist"
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload assets to S3
+        run: aws s3 sync dist "s3://$S3_CDN_BUCKET" --delete --exclude "index.html" --cache-control "public,max-age=31536000,immutable"
+
+      - name: Upload HTML shell
+        run: aws s3 cp dist/index.html "s3://$S3_CDN_BUCKET/index.html" --cache-control "no-cache"
+
+      - name: Invalidate CloudFront paths
+        run: aws cloudfront create-invalidation --distribution-id "$CF_DIST_ID" --paths "/*"
+
+  deploy-backend:
+    name: Build & Deploy Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_PAGER: ""
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }}
+      ECS_BACKEND_SERVICE: ${{ vars.ECS_BACKEND_SERVICE }}
+      ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+    steps:
+      - name: Checkout backend files
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: backend
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare backend image metadata
+        id: backend-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.backend-meta.outputs.tags }}
+          labels: ${{ steps.backend-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Amazon ECS service
+        run: aws ecs update-service --cluster "$ECS_CLUSTER_NAME" --service "$ECS_BACKEND_SERVICE" --force-new-deployment
