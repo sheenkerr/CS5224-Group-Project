@@ -13,6 +13,8 @@ type MindmapperSetupProps = {
     stage: number;
 };
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8001").replace(/\/$/, "");
+
 /** Dynamically load a script tag if it hasn't been loaded yet */
 function loadScript(src: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -35,7 +37,7 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
 
     const completeSetup = async () => {
         /** Send the folder ID and the folder name to our backend */
-        const response = await axios.post("http://localhost:8001/api/mindmapper/google/setup-listener", {
+        const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
             folderId: selectedFolder?.id,
             folderName: selectedFolder?.name,
         });
@@ -49,7 +51,7 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     };
 
     const googleLogin = async () => {
-        const response = await axios.get("http://localhost:8001/api/mindmapper/google/login-url");
+        const response = await axios.get(`${API_BASE_URL}/api/mindmapper/google/login-url`);
         const authUrl = response.data.authUrl;
         window.location.href = authUrl;
     };
@@ -61,8 +63,8 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         try {
             // Fetch access token and API key from the backend
             const [tokenRes, apiKeyRes] = await Promise.all([
-                axios.get("http://localhost:8001/api/mindmapper/google/access-token"),
-                axios.get("http://localhost:8001/api/mindmapper/google/api-key"),
+                axios.get(`${API_BASE_URL}/api/mindmapper/google/access-token`),
+                axios.get(`${API_BASE_URL}/api/mindmapper/google/api-key`),
             ]);
 
             const accessToken: string = tokenRes.data.access_token;
