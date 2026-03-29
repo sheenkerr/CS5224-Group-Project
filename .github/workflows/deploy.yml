@@ -76,7 +76,8 @@ jobs:
     environment: production
     env:
       AWS_PAGER: ""
-      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
       CF_DIST_ID: ${{ vars.CF_DIST_ID }}
       S3_CDN_BUCKET: ${{ vars.S3_CDN_BUCKET }}
       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
@@ -111,10 +112,25 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Validate AWS auth configuration
+        shell: bash
+        run: |
+          if [[ -z "$AWS_REGION" ]]; then
+            echo "::error::Missing AWS_REGION. Add it as a GitHub Actions variable or secret on the production environment."
+            exit 1
+          fi
+
+          if [[ -z "$AWS_ROLE_ARN" && ( -z "${{ secrets.AWS_ACCESS_KEY_ID }}" || -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ) ]]; then
+            echo "::error::Missing AWS credentials. Set AWS_ROLE_ARN as a GitHub Actions variable/secret for OIDC, or add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets."
+            exit 1
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Upload assets to S3
@@ -134,7 +150,8 @@ jobs:
     environment: production
     env:
       AWS_PAGER: ""
-      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION }}
+      AWS_ROLE_ARN: ${{  secrets.AWS_ROLE_ARN }}
       ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }}
       ECS_BACKEND_SERVICE: ${{ vars.ECS_BACKEND_SERVICE }}
       ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
@@ -144,10 +161,25 @@ jobs:
         with:
           sparse-checkout: backend
 
+      - name: Validate AWS auth configuration
+        shell: bash
+        run: |
+          if [[ -z "$AWS_REGION" ]]; then
+            echo "::error::Missing AWS_REGION. Add it as a GitHub Actions variable or secret on the production environment."
+            exit 1
+          fi
+
+          if [[ -z "$AWS_ROLE_ARN" && ( -z "${{ secrets.AWS_ACCESS_KEY_ID }}" || -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ) ]]; then
+            echo "::error::Missing AWS credentials. Set AWS_ROLE_ARN as a GitHub Actions variable/secret for OIDC, or add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets."
+            exit 1
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
