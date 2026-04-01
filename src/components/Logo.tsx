@@ -1,110 +1,112 @@
 import type { ReactElement } from "react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
+import flowfoxLogoUrl from "../assets/flowfox.png";
 import { useTheme } from "../context/ThemeContext";
 
 interface LogoProps {
-    size?: number;
-    showText?: boolean;
-    className?: string;
-    variant?: "light" | "dark";
-    subtitle?: string;
-    linkToHome?: boolean;
-    onClick?: () => void;
+  size?: number;
+  showText?: boolean;
+  className?: string;
+  variant?: "light" | "dark";
+  subtitle?: string;
+  linkToHome?: boolean;
+  onClick?: () => void;
 }
 
 interface FoxIconProps {
-    size?: number;
+  size?: number;
 }
 
 function FoxIcon({ size = 70 }: FoxIconProps): ReactElement {
-    const { theme } = useTheme();
+  const { theme } = useTheme();
+  const logoMask = `url(${flowfoxLogoUrl})`;
 
-    if (theme === "dark") {
-        return (
-            <div
-                style={{
-                    width: size,
-                    height: size,
-                    backgroundColor: "#ff8c00",
-                    maskImage: "url(/flowfox.png)",
-                    maskSize: "contain",
-                    maskRepeat: "no-repeat",
-                    maskPosition: "center",
-                    WebkitMaskImage: "url(/flowfox.png)",
-                    WebkitMaskSize: "contain",
-                    WebkitMaskRepeat: "no-repeat",
-                    WebkitMaskPosition: "center",
-                    display: "block",
-                }}
-            />
-        );
-    }
-
+  if (theme === "dark") {
     return (
-        <img
-            src="/flowfox.png"
-            alt="FlowFox"
-            width={size}
-            height={size}
-            style={{ display: "block", objectFit: "contain" }}
-        />
+      <div
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: "#ff8c00",
+          maskImage: logoMask,
+          maskSize: "contain",
+          maskRepeat: "no-repeat",
+          maskPosition: "center",
+          WebkitMaskImage: logoMask,
+          WebkitMaskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          display: "block",
+        }}
+      />
     );
+  }
+
+  return (
+    <img
+      src={flowfoxLogoUrl}
+      alt="FlowFox"
+      width={size}
+      height={size}
+      style={{ display: "block", objectFit: "contain" }}
+    />
+  );
 }
 
 function Logo({
-    size = 70,
-    showText = false,
-    className = "",
-    variant = "dark",
-    subtitle,
-    linkToHome = false,
-    onClick,
+  size = 70,
+  showText = false,
+  className = "",
+  variant = "dark",
+  subtitle,
+  linkToHome = false,
+  onClick,
 }: LogoProps): ReactElement {
-    const textColors = {
-        light: {
-            primary: "text-white",
-            secondary: "text-gray-400",
-            brand: "#ff8c00",
-        },
-        dark: {
-            primary: "text-gray-900",
-            secondary: "text-gray-500",
-            brand: "#ff8c00",
-        },
-    };
+  const textColors = {
+    light: {
+      primary: "text-white",
+      secondary: "text-gray-400",
+      brand: "#ff8c00",
+    },
+    dark: {
+      primary: "text-gray-900",
+      secondary: "text-gray-500",
+      brand: "#ff8c00",
+    },
+  };
 
-    const colors = textColors[variant];
+  const colors = textColors[variant];
 
-    const content = (
-        <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`flex items-center gap-3 ${onClick ? "cursor-pointer" : ""} ${className}`}
-            onClick={onClick}
-        >
-            <FoxIcon size={size} />
-            {showText && (
-                <div>
-                    <h1
-                        className="text-4xl font-medium tracking-[0.1em]"
-                        style={{ color: colors.brand }}
-                    >
-                        FLOWFOX
-                    </h1>
-                    {subtitle && (
-                        <p className={`text-xs ${colors.secondary}`}>{subtitle}</p>
-                    )}
-                </div>
-            )}
-        </motion.div>
-    );
+  const content = (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className={`flex items-center gap-3 ${onClick ? "cursor-pointer" : ""} ${className}`}
+      onClick={onClick}
+    >
+      <FoxIcon size={size} />
+      {showText && (
+        <div>
+          <h1
+            className="text-4xl font-medium tracking-[0.1em]"
+            style={{ color: colors.brand }}
+          >
+            FLOWFOX
+          </h1>
+          {subtitle && (
+            <p className={`text-xs ${colors.secondary}`}>{subtitle}</p>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
 
-    if (linkToHome) {
-        return <Link to="/">{content}</Link>;
-    }
+  if (linkToHome) {
+    return <Link to="/">{content}</Link>;
+  }
 
-    return content;
+  return content;
 }
 
 export default Logo;
