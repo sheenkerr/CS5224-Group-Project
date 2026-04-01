@@ -7,7 +7,7 @@
 		"dev": "concurrently -n frontend,backend,ngrok -c blue,green,yellow \"vite\" \"npm run dev:backend\" \"npm run dev:ngrok\"",
 		"dev:frontend": "vite",
 		"dev:backend": "cd backend && npm run dev",
-		"dev:ngrok": "ngrok http 4001",
+		"dev:ngrok": "ngrok http 8001",
 		"dev:ngrok:docker": "docker-compose -f docker-compose.ngrok.yml up",
 		"dev:ngrok:docker:detach": "docker-compose -f docker-compose.ngrok.yml up -d",
 		"build": "tsc -b && vite build",
