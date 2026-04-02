@@ -2,12 +2,13 @@ import axios from "axios";
 import { google } from "googleapis";
 import oauth2Client from "../../../middlewares/googleAuthMiddleware";
 import { createLogger } from "../../../utils/logger";
+import { use } from "react";
 
 const log = createLogger("Mindmapper");
 // Processes new files in the watched folder
-export async function processNewFiles(pageToken: string, folderId: string, folderName: string) {
+export async function processNewFiles(pageToken: string, folderId: string, folderName: string, email: string) {
     const drive = google.drive({ version: "v3", auth: oauth2Client });
-
+    
     // Fetch the actual list of changes since the last page token
     const changesRes = await drive.changes.list({
         pageToken: pageToken,
@@ -35,16 +36,17 @@ export async function processNewFiles(pageToken: string, folderId: string, folde
         if (parents.includes(watchedFolderId)) {
             log.info(`New file detected in watched folder "${folderName}": ${file.name} (id: ${change.fileId})`);
             // TODO: trigger mind-map processing here
-            await triggerEmail(file.name ?? "Unknown file", folderName);
+            await triggerEmail(file.name ?? "Unknown file", folderName, email);
         }
     }
 }
 
-async function triggerEmail(fileName: string, folderName: string) {
+async function triggerEmail(fileName: string, folderName: string, email: string) {
     try {
-        await axios.post("https://u32fstm5zowhkclgs6bxptvlqe0nsfef.lambda-url.ap-southeast-1.on.aws/", {
+        await axios.post("https://hjbr7jad2sardrq2srtjbdfhmm0nhoye.lambda-url.us-east-2.on.aws/", {
             subject: "New file uploaded",
-            message: `New file "${fileName}" uploaded to folder "${folderName}"`
+            message: `New file "${fileName}" uploaded to folder "${folderName}"`,
+            email: email
         });
     } catch (err) {
         console.error("Failed to trigger email:", err);

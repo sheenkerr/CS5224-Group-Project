@@ -51,7 +51,7 @@ router.get("/google/access-token", (req, res) => {
 
 /** Register a Google Drive watch channel for the selected folder */
 router.post("/google/setup-listener", async (req, res) => {
-    const { folderId, folderName } = req.body;
+    const { folderId, folderName, email} = req.body;
 
     if (!folderId || !folderName) {
         res.status(400).json({
@@ -62,7 +62,7 @@ router.post("/google/setup-listener", async (req, res) => {
     }
 
     try {
-        await setupDriveWatch(folderId, folderName);
+        await setupDriveWatch(folderId, folderName, email);
         res.status(200).json({
             message: "Drive watch registered",
             success: true

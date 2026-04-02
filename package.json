@@ -4,8 +4,7 @@
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"dev": "concurrently -n frontend,backend,ngrok -c blue,green,yellow \"vite\" \"npm run dev:backend\" \"npm run dev:ngrok\"",
-		"dev:frontend": "vite",
+		"dev": "concurrently -n frontend,backend,ngrok -c blue,green,yellow \"vite --host --port 4000\" \"npm run dev:backend\" \"npm run dev:ngrok\"",
 		"dev:backend": "cd backend && npm run dev",
 		"dev:ngrok": "ngrok http 8001",
 		"dev:ngrok:docker": "docker-compose -f docker-compose.ngrok.yml up",

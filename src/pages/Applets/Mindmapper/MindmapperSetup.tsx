@@ -2,6 +2,7 @@ import React from "react";
 import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
 import { Dialog } from "@mui/material";
+import { useUser } from "@clerk/clerk-react";
 
 /** Shape of the folder selected by the Google Picker */
 type SelectedFolder = {
@@ -34,12 +35,19 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     const [open, setOpen] = React.useState(true);
     const [selectedFolder, setSelectedFolder] = React.useState<SelectedFolder | null>(null);
     const [pickerLoading, setPickerLoading] = React.useState(false);
-
+    const { user } = useUser();
+    const email = user?.primaryEmailAddress?.emailAddress;
     const completeSetup = async () => {
         /** Send the folder ID and the folder name to our backend */
+        if (!email) {
+            console.error("Email not available yet");
+            alert("Please wait a moment and try again.");
+            return;
+        }
         const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
             folderId: selectedFolder?.id,
             folderName: selectedFolder?.name,
+            email: email
         });
 
         if (response.data.success) {
