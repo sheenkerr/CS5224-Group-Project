@@ -15,6 +15,7 @@ type WatchChannelState = {
     folderId: string; // This is the folder that the user selected
     folderName: string; // Same but the name
     expiration: number; // This is the expiration
+    email: string;
 };
 
 let activeChannel: WatchChannelState | null = null;
@@ -32,6 +33,7 @@ export function getGoogleLoginUrl() {
     const SCOPE = [
         "https://www.googleapis.com/auth/drive.metadata.readonly",
         "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/userinfo.email",
     ];
 
     const authUrl = oauth2Client.generateAuthUrl({
@@ -56,6 +58,17 @@ export async function handleGoogleCallback(req: any) {
 
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
+    const oauth2 = google.oauth2({
+        auth: oauth2Client,
+        version: "v2",
+    });
+
+    try {
+        const { data } = await oauth2.userinfo.get();
+        (global as any).googleUserEmail = data.email;
+    } catch (err) {
+        console.error("Failed to get user email:", err);
+    }
     return true;
 }
 
@@ -63,7 +76,7 @@ export async function handleGoogleCallback(req: any) {
  * Register a Google Drive changes watch channel for the given folder.
  * Google will POST to our webhook endpoint whenever anything changes.
  */
-export async function setupDriveWatch(folderId: string, folderName: string) {
+export async function setupDriveWatch(folderId: string, folderName: string, email: string) {
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
     // Get a baseline page token so we only see changes from NOW onward
@@ -106,6 +119,7 @@ export async function setupDriveWatch(folderId: string, folderName: string) {
         folderId,
         folderName,
         expiration: Number(expiration ?? 0),
+        email,
     };
 
     log.info(`Drive watch registered, channel: ${channelId}, expires: ${new Date(Number(expiration)).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })}`);
@@ -133,5 +147,5 @@ export async function handleDriveWebhook(headers: Record<string, string | string
     }
 
     log.info(`Drive webhook: change detected (state: ${resourceState})`);
-    processNewFiles(activeChannel.pageToken, activeChannel.folderId, activeChannel.folderName);
+    processNewFiles(activeChannel.pageToken, activeChannel.folderId, activeChannel.folderName, activeChannel.email);
 }
