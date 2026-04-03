@@ -33,6 +33,7 @@ export function getGoogleLoginUrl() {
     const SCOPE = [
         "https://www.googleapis.com/auth/drive.metadata.readonly",
         "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/userinfo.email",
     ];
 
     const authUrl = oauth2Client.generateAuthUrl({
@@ -57,6 +58,17 @@ export async function handleGoogleCallback(req: any) {
 
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
+    const oauth2 = google.oauth2({
+        auth: oauth2Client,
+        version: "v2",
+    });
+
+    try {
+        const { data } = await oauth2.userinfo.get();
+        (global as any).googleUserEmail = data.email;
+    } catch (err) {
+        console.error("Failed to get user email:", err);
+    }
     return true;
 }
 

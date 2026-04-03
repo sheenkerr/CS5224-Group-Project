@@ -1,52 +1,54 @@
+import smtplib
+from email.mime.text import MIMEText
 import json
-import boto3
 import os
 
-sns = boto3.client("sns")
-
-
 def lambda_handler(event, context):
+    try:
+        print("RAW EVENT:", event)
 
-    body = json.loads(event["body"]) if "body" in event else event
+        # handle different event formats
+        if isinstance(event, str):
+            body = json.loads(event)
+        elif "body" in event:
+            body = json.loads(event["body"])
+        else:
+            body = event
 
-    subject = body.get("subject", "Default Subject")
-    message = body.get("message", "Default Message")
-    email = body.get("email")
+        subject = body.get("subject", "Default Subject")
+        message = body.get("message", "Default Message")
+        to_email = body.get("email")
 
-    topic_arn = os.environ["SNS_TOPIC_ARN"]
+        sender = os.environ["GMAIL_USER"]
+        password = os.environ["GMAIL_PASS"]
 
-    # subscribe email
-    if email:
-        try:
-            if not is_email_subscribed(topic_arn, email):
-                sns.subscribe(
-                    TopicArn=topic_arn,
-                    Protocol='email',
-                    Endpoint=email
-                )
-                print("Subscription initiated:", email)
-            else:
-                print("Already subscribed:", email)
+        if not to_email:
+            return {
+                "statusCode": 400,
+                "body": "Missing recipient email"
+            }
 
-        except Exception as e:
-            print("Subscription error:", str(e))
+        # build email
+        msg = MIMEText(message)
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = to_email
 
-    # send email
-    sns.publish(
-        TopicArn=topic_arn,
-        Subject=subject,
-        Message=message
-    )
+        # send email
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(sender, password)
+        server.sendmail(sender, to_email, msg.as_string())
+        server.quit()
 
-    return {
-        "statusCode": 200,
-        "body": json.dumps({"message": "Email sent"})
-    }
-def is_email_subscribed(topic_arn, email):
-    response = sns.list_subscriptions_by_topic(TopicArn=topic_arn)
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"message": f"Email sent to {to_email}"})
+        }
 
-    for sub in response.get("Subscriptions", []):
-        if sub["Endpoint"] == email and sub["SubscriptionArn"] != "PendingConfirmation":
-            return True
-
-    return False
+    except Exception as e:
+        print("ERROR:", str(e))
+        return {
+            "statusCode": 500,
+            "body": str(e)
+        }
