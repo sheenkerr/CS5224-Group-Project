@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────
-// setup-dynamo.ts
+// setupDynamo.ts
 // Creates the DynamoDB table for mindmapper.
 // Run ONCE before first use.
 //
 // Usage:
 //   cd backend
-//   npx ts-node src/applets/mindmapper/setup-dynamo.ts
+//   npx ts-node src/applets/mindmapper/setupDynamo.ts
 // ─────────────────────────────────────────────
 
 import dotenv from "dotenv";

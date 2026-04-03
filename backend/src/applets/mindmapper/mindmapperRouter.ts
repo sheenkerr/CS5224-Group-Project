@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { exportGraphToNotion } from "./exportToNotion";
 import { extractGraph } from "./extract";
 import { saveMindMap, getMindMap, getAllMindMaps, getMergedGraph } from "./graph";
 import { ExtractRequest } from "./types";
@@ -24,6 +25,21 @@ router.get("/:userId/merged", async (req, res) => {
   try {
     const graph = await getMergedGraph(req.params.userId);
     return res.status(200).json({ success: true, graph });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Export graph to Notion
+router.post("/export-notion", async (req, res) => {
+  const { userId, documentId, documentName, graph, notionApiKey, exportPrompt } = req.body;
+  if (!userId || !documentId || !documentName || !graph || !notionApiKey) {
+    return res.status(400).json({ success: false, error: "Missing required fields for Notion export." });
+  }
+  try {
+    const pageId = await exportGraphToNotion(graph, documentName, notionApiKey, exportPrompt);
+    return res.status(200).json({ success: true, pageId });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ success: false, error: message });

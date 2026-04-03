@@ -8,7 +8,7 @@ import { useState } from "react";
 import MindMapViewer from "../components/MindMapViewer";
 import { MindMap } from "../../backend/src/applets/mindmapper/types";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
 interface MindMapPageProps {
   prefillText?: string;      // document text from Google Drive
@@ -19,23 +19,57 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
   const [documentText, setDocumentText] = useState(prefillText || "");
   const [documentName, setDocumentName] = useState(prefillName || "My Document");
   const [extractionPrompt, setExtractionPrompt] = useState("key concepts and how they relate to each other");
-  const [userApiKey, setUserApiKey]           = useState("");
+  const [exportPrompt, setExportPrompt] = useState("");
+  const [userApiKey, setUserApiKey] = useState("");
+  const [notionApiKey, setNotionApiKey] = useState("");
 
   // Result state
-  const [graph, setGraph]     = useState<MindMap | null>(null);
+  const [graph, setGraph] = useState<MindMap | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<"single" | "merged">("single");
-    const [mergedGraph, setMergedGraph] = useState<MindMap | null>(null);
+  const [mergedGraph, setMergedGraph] = useState<MindMap | null>(null);
 
-    const handleMergeView = async () => {
-  const res = await fetch(`${API_BASE}/api/mindmapper/test-user/merged`);
-  const data = await res.json();
-  console.log("Merged response:", JSON.stringify(data, null, 2)); // add this
-  setMergedGraph(data.graph);
-  setViewMode("merged");
-};
+  const handleMergeView = async () => {
+    const res = await fetch(`${API_BASE}/api/mindmapper/test-user/merged`);
+    const data = await res.json();
+    console.log("Merged response:", JSON.stringify(data, null, 2)); // add this
+    setMergedGraph(data.graph);
+    setViewMode("merged");
+  };
+
+  const handleExport = async () => {
+    if (!graph) {
+      setError("No graph to export.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/mindmapper/export-notion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "test-user",
+          documentId: `doc-${Date.now()}`,
+          documentName,
+          graph,
+          notionApiKey,
+          exportPrompt,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Export failed.");
+      alert(`Exported to Notion page ${data.pageId}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Export error.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   const handleExtract = async () => {
     if (!documentText.trim()) {
@@ -102,6 +136,26 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
           />
         </label>
 
+        {/* Notion API Key */}
+        <label style={labelStyle}>
+          Notion API Key
+          <input
+            value={notionApiKey}
+            onChange={(e) => setNotionApiKey(e.target.value)}
+            style={inputStyle}
+            placeholder="Enter your Notion secret key"
+          />
+        </label>
+        {/* Export Prompt */}
+        <label style={labelStyle}>
+          Export Prompt (e.g., "Methods section")
+          <input
+            value={exportPrompt}
+            onChange={(e) => setExportPrompt(e.target.value)}
+            style={inputStyle}
+            placeholder="Describe which part of graph to export"
+          />
+        </label>
         {/* Extraction prompt */}
         <label style={labelStyle}>
           What to extract
@@ -141,39 +195,57 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
         >
           {loading ? "Extracting..." : "Extract Graph →"}
         </button>
+        {/* Export to Notion button */}
         <button
-  onClick={handleMergeView}
-  style={{
-    padding: "12px",
-    background: "#7c3aed",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    fontWeight: 700,
-    fontSize: 14,
-    cursor: "pointer",
-  }}
->
-  🔗 View All Docs Merged
-</button>
+          onClick={handleExport}
+          disabled={loading || !graph}
+          style={{
+            padding: "12px",
+            background: loading ? "#475569" : "#4f46e5",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 700,
+            fontSize: 14,
+            marginTop: 8,
+            cursor: loading ? "not-allowed" : "pointer",
+          }}
+        >
+          Export to Notion
+        </button>
+        <button
+          onClick={handleMergeView}
+          style={{
+            padding: "12px",
+            background: "#7c3aed",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: "pointer",
+          }}
+        >
+          🔗 View All Docs Merged
+        </button>
 
-{/* Toggle back to single view */}
-{viewMode === "merged" && (
-  <button
-    onClick={() => setViewMode("single")}
-    style={{
-      padding: "8px",
-      background: "none",
-      color: "#94a3b8",
-      border: "1px solid #334155",
-      borderRadius: 8,
-      fontSize: 12,
-      cursor: "pointer",
-    }}
-  >
-    ← Back to single doc view
-  </button>
-)}
+        {/* Toggle back to single view */}
+        {viewMode === "merged" && (
+          <button
+            onClick={() => setViewMode("single")}
+            style={{
+              padding: "8px",
+              background: "none",
+              color: "#94a3b8",
+              border: "1px solid #334155",
+              borderRadius: 8,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            ← Back to single doc view
+          </button>
+        )}
         {/* Error */}
         {error && (
           <div style={{ background: "#fee2e2", color: "#991b1b", padding: 10, borderRadius: 6, fontSize: 12 }}>
@@ -191,32 +263,32 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
       </div>
 
       {/* ── Right Panel: Graph ── */}
-<div style={{ flex: 1, overflow: "hidden" }}>
-  {graph || mergedGraph ? (
-    <MindMapViewer
-  key={viewMode === "merged" ? "merged" : graph?.nodes[0]?.id}
-  graph={viewMode === "merged" && mergedGraph ? mergedGraph : graph!}
-  documentName={viewMode === "merged" ? "All Documents — Merged View" : documentName}
-/>
-  ) : (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#94a3b8",
-        gap: 12,
-      }}
-    >
-      <span style={{ fontSize: 48 }}>🗺️</span>
-      <p style={{ fontSize: 16, margin: 0 }}>
-        Paste a document on the left and click <strong>Extract Graph</strong>
-      </p>
-    </div>
-  )}
-</div>
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        {graph || mergedGraph ? (
+          <MindMapViewer
+            key={viewMode === "merged" ? "merged" : graph?.nodes[0]?.id}
+            graph={viewMode === "merged" && mergedGraph ? mergedGraph : graph!}
+            documentName={viewMode === "merged" ? "All Documents — Merged View" : documentName}
+          />
+        ) : (
+          <div
+            style={{
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#94a3b8",
+              gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 48 }}>🗺️</span>
+            <p style={{ fontSize: 16, margin: 0 }}>
+              Paste a document on the left and click <strong>Extract Graph</strong>
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
