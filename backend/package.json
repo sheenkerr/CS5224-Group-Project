@@ -16,11 +16,11 @@
     "@clerk/express": "^2.0.7",
     "@aws-sdk/client-dynamodb": "^3.1009.0",
     "@aws-sdk/lib-dynamodb": "^3.1009.0",
-    "axios": "^1.13.6",
+    "axios": "^1.14.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "mongodb": "^7.1.1",
+    "googleapis": "^171.4.0",
     "groq-sdk": "^1.1.1"
   },
   "devDependencies": {
