@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { ClerkProvider } from "@clerk/clerk-react";
+import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import LandingPage from "./pages/LandingPage";
 import Applets from "./pages/Applets";
 import Login from "./pages/Login";
@@ -28,7 +28,16 @@ function App(): React.ReactElement {
 					<Route path="/register/*" element={<Register />} />
 					<Route path="/applets" element={<Applets />} />
 					<Route path="/dashboard" element={<Dashboard />} />
-					<Route path="/mindmap" element={<MindMapPage />} />
+					<Route path="/mindmap" element={
+					<>
+						<SignedIn>
+						<MindMapPage />
+						</SignedIn>
+						<SignedOut>
+						<RedirectToSignIn />
+						</SignedOut>
+					</>
+					} />
 					<Route
 						path="/applets/Mindmappers/setup"
 						element={<Mindmapper isSetup={true} />}
