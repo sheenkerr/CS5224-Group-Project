@@ -20,8 +20,12 @@ interface MindMapPageProps {
 
 export default function MindMapPage({ prefillText, prefillName }: MindMapPageProps) {
   const { apiFetch } = useApi();
-  const [documentText, setDocumentText] = useState(prefillText || "");
-  const [documentName, setDocumentName] = useState(prefillName || "My Document");
+  // Extract tab state (independent)
+  const [extractText, setExtractText] = useState(prefillText || "");
+  const [extractName, setExtractName] = useState(prefillName || "My Document");
+
+  // View state (for documents tab)
+  const [activeDocumentName, setActiveDocumentName] = useState<string | null>(null);
   const [extractionPrompt, setExtractionPrompt] = useState("key concepts and how they relate to each other");
   const [userApiKey, setUserApiKey]           = useState("");
 
@@ -43,7 +47,7 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
   };
 
   const handleExtract = async () => {
-    if (!documentText.trim()) {
+    if (!extractText.trim()) {
       setError("Please paste some document text first.");
       return;
     }
@@ -56,8 +60,8 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
         method: "POST",
         body: JSON.stringify({
           documentId: `doc-${Date.now()}`,
-          documentName,
-          documentText,
+          extractName,
+          extractText,
           extractionPrompt,
           apiKey: userApiKey || undefined,
         }),
@@ -168,7 +172,7 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
     onViewSingle={(record) => {
       setMergedGraph(null);
       setGraph(record.graph!);
-      setDocumentName(record.documentName);
+      setActiveDocumentName(record.documentName);
       setViewMode("single");
     }}
     onViewMerged={async (records) => {
@@ -182,8 +186,8 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
         <label style={labelStyle}>
           Document Name
           <input
-            value={documentName}
-            onChange={(e) => setDocumentName(e.target.value)}
+            value={extractName}
+            onChange={(e) => setExtractName(e.target.value)}
             style={inputStyle}
             placeholder="e.g. Research Paper"
           />
@@ -204,8 +208,8 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
         <label style={labelStyle}>
           Document Text
           <textarea
-            value={documentText}
-            onChange={(e) => setDocumentText(e.target.value)}
+            value={extractText}
+            onChange={(e) => setExtractText(e.target.value)}
             style={{ ...inputStyle, height: 200, resize: "vertical" }}
             placeholder="Paste your document text here..."
           />
@@ -280,13 +284,21 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
   </div>
 
       {/* ── Right Panel: Graph ── */}
-<div style={{ flex: 1, overflow: "hidden" }}>
-  {graph || mergedGraph ? (
-    <MindMapViewer
-  key={viewMode === "merged" ? "merged" : `${documentName}-${graph?.nodes.length}`}
-  graph={viewMode === "merged" && mergedGraph ? mergedGraph : graph!}
-  documentName={viewMode === "merged" ? "All Documents — Merged View" : documentName}
-/>
+  <div style={{ flex: 1, overflow: "hidden" }}>
+    {graph || mergedGraph ? (
+      <MindMapViewer
+    key={
+      viewMode === "merged"
+        ? "merged"
+        : `${activeDocumentName || extractName}-${graph?.nodes.length}`
+    }
+    graph={viewMode === "merged" && mergedGraph ? mergedGraph : graph!}
+    documentName={
+    viewMode === "merged"
+      ? "All Documents — Merged View"
+      : activeDocumentName || extractName
+    }
+  />
   ) : (
     <div
       style={{
