@@ -6,7 +6,10 @@
 
 import { useState } from "react";
 import MindMapViewer from "../components/MindMapViewer";
-import { MindMap } from "../../backend/src/applets/mindmapper/types";
+import { MindMap, MindMapRecord } from "../../backend/src/applets/mindmapper/types";
+import MindMapDocumentTable from "../components/MindMapDocumentTable";
+import { useApi } from "../utils/api";
+
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -16,6 +19,7 @@ interface MindMapPageProps {
 }
 
 export default function MindMapPage({ prefillText, prefillName }: MindMapPageProps) {
+  const { apiFetch } = useApi();
   const [documentText, setDocumentText] = useState(prefillText || "");
   const [documentName, setDocumentName] = useState(prefillName || "My Document");
   const [extractionPrompt, setExtractionPrompt] = useState("key concepts and how they relate to each other");
@@ -27,15 +31,16 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
   const [error, setError]     = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<"single" | "merged">("single");
-    const [mergedGraph, setMergedGraph] = useState<MindMap | null>(null);
+  const [mergedGraph, setMergedGraph] = useState<MindMap | null>(null);
+  const [tab, setTab] = useState<"extract" | "documents">("documents");
 
-    const handleMergeView = async () => {
-  const res = await fetch(`${API_BASE}/api/mindmapper/test-user/merged`);
-  const data = await res.json();
-  console.log("Merged response:", JSON.stringify(data, null, 2)); // add this
-  setMergedGraph(data.graph);
-  setViewMode("merged");
-};
+  const handleMergeView = async () => {
+    const res = await apiFetch("/api/mindmapper/merged");
+    const data = await res.json();
+    console.log("Merged response:", JSON.stringify(data, null, 2)); 
+    setMergedGraph(data.graph);
+    setViewMode("merged");
+  };
 
   const handleExtract = async () => {
     if (!documentText.trim()) {
@@ -47,11 +52,9 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
     setGraph(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/mindmapper/extract`, {
+      const res = await apiFetch("/api/mindmapper/extract", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: "test-user",           // replace with real auth userId later
           documentId: `doc-${Date.now()}`,
           documentName,
           documentText,
@@ -69,6 +72,38 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
       setLoading(false);
     }
   };
+
+  const handleMergeSelected = async (records: MindMapRecord[]) => {
+    const documentIds = records.map(r => r.documentId);
+    const mergedName =
+      records.map(r => r.documentName).join(" + ") + " merged";
+
+    const res = await apiFetch("/api/mindmapper/merge", {
+      method: "POST",
+      body: JSON.stringify({ documentIds, mergedName }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      setMergedGraph(data.graph);
+      setViewMode("merged");
+    }
+  };
+
+  function mergeRecordsClientSide(records: MindMapRecord[]): MindMap {
+  const nodes = records.flatMap(r =>
+    r.graph!.nodes.map(n => ({ ...n, id: `${r.documentId}_${n.id}`, text: `[${r.documentName}] ${n.text}` }))
+  );
+  const edges = records.flatMap(r =>
+    r.graph!.edges.map(e => ({
+      ...e,
+      source: `${r.documentId}_${e.source}`,
+      target: `${r.documentId}_${e.target}`,
+    }))
+  );
+  return { nodes, edges };
+}
 
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "sans-serif", background: "#f8fafc" }}>
@@ -91,7 +126,59 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
           Paste any document text and we'll extract a knowledge graph for you.
         </p>
 
-        {/* Document name */}
+        {/* Tab switcher */}
+        <div style={{ display: "flex", gap: 4 }}>
+          <button
+            onClick={() => setTab("documents")}
+            style={{
+              flex: 1,
+              padding: "6px",
+              background: tab === "documents" ? "#3b82f6" : "#334155",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            📄 Documents
+          </button>
+          <button
+            onClick={() => setTab("extract")}
+            style={{
+              flex: 1,
+              padding: "6px",
+              background: tab === "extract" ? "#3b82f6" : "#334155",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            ✏️ Extract
+          </button>
+        </div>
+
+      {tab === "documents" ? (
+  <MindMapDocumentTable
+    tab={tab}
+    onViewSingle={(record) => {
+      setMergedGraph(null);
+      setGraph(record.graph!);
+      setDocumentName(record.documentName);
+      setViewMode("single");
+    }}
+    onViewMerged={async (records) => {
+     await handleMergeSelected(records);
+    setViewMode("merged");
+  }}
+  />
+) : (
+  <>
+  {/* Document name */}
         <label style={labelStyle}>
           Document Name
           <input
@@ -141,7 +228,7 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
         >
           {loading ? "Extracting..." : "Extract Graph →"}
         </button>
-        <button
+        {/* <button
   onClick={handleMergeView}
   style={{
     padding: "12px",
@@ -155,9 +242,9 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
   }}
 >
   🔗 View All Docs Merged
-</button>
+</button> */}
 
-{/* Toggle back to single view */}
+{/* Toggle back to single view
 {viewMode === "merged" && (
   <button
     onClick={() => setViewMode("single")}
@@ -173,10 +260,10 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
   >
     ← Back to single doc view
   </button>
-)}
+)} */}
         {/* Error */}
         {error && (
-          <div style={{ background: "#fee2e2", color: "#991b1b", padding: 10, borderRadius: 6, fontSize: 12 }}>
+          <div style={{ background: "#323232", color: "#991b1b", padding: 10, borderRadius: 6, fontSize: 12 }}>
             {error}
           </div>
         )}
@@ -188,13 +275,15 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
             <strong style={{ color: "#f8fafc" }}>{graph.edges.length} edges</strong> extracted.
           </div>
         )}
-      </div>
+    </>
+    )}
+  </div>
 
       {/* ── Right Panel: Graph ── */}
 <div style={{ flex: 1, overflow: "hidden" }}>
   {graph || mergedGraph ? (
     <MindMapViewer
-  key={viewMode === "merged" ? "merged" : graph?.nodes[0]?.id}
+  key={viewMode === "merged" ? "merged" : `${documentName}-${graph?.nodes.length}`}
   graph={viewMode === "merged" && mergedGraph ? mergedGraph : graph!}
   documentName={viewMode === "merged" ? "All Documents — Merged View" : documentName}
 />
