@@ -20,7 +20,9 @@ export interface MindMapRecord {
   userId: string;
   documentId: string;
   documentName: string;
-  graph: MindMap;
+  s3Key?: string;
+  status: "processing" | "completed" | "failed"; 
+  graph?: MindMap;
   extractionPrompt: string;
   createdAt: number;
 }

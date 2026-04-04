@@ -18,15 +18,15 @@ async function main() {
 
   // Test save
   console.log("Saving graph...");
-  await saveMindMap("test-user", "doc-001", "Einstein Doc", mockGraph, "key concepts");
+  await saveMindMap("test-user", "doc-001", "Einstein Doc", mockGraph, "key concepts", "completed");
   console.log("✅ Saved!");
 
   // Test retrieve
   console.log("Retrieving graph...");
   const record = await getMindMap("test-user", "doc-001");
   console.log("✅ Retrieved:", record?.documentName);
-  console.log("Nodes:", record?.graph.nodes.length);
-  console.log("Edges:", record?.graph.edges.length);
+  console.log("Nodes:", record?.graph!.nodes.length);
+  console.log("Edges:", record?.graph!.edges.length);
 }
 
 main().catch(console.error);
