@@ -12,6 +12,7 @@ import {
   PutCommand,
   GetCommand,
   QueryCommand,
+  DeleteCommand
 } from "@aws-sdk/lib-dynamodb";
 import Groq from "groq-sdk";
 import { MindMap, MindMapRecord, GraphNode, GraphEdge } from "./types.js";
@@ -29,8 +30,9 @@ export async function saveMindMap(
   userId: string,
   documentId: string,
   documentName: string,
-  graph: MindMap,
-  extractionPrompt: string
+  graph: MindMap | undefined,
+  extractionPrompt: string,
+  status: "processing" | "completed" | "failed" // ✅ NEW
 ): Promise<void> {
   const record: MindMapRecord = {
     userId,
@@ -38,6 +40,7 @@ export async function saveMindMap(
     documentName,
     graph,
     extractionPrompt,
+    status,
     createdAt: Date.now(),
   };
 
@@ -82,29 +85,25 @@ export async function getAllMindMaps(userId: string): Promise<MindMapRecord[]> {
 }
 
 /**
- * Merge all MindMaps for a user into one graph.
- * Nodes with the same label across documents are deduplicated.
- * A second LLM call finds cross-document connections between different nodes.
+ * Merge selected MindMaps for a user into one graph.
+ * Only merges the provided records and consults LLM for cross-doc connections.
  */
-export async function getMergedGraph(userId: string): Promise<MindMap> {
-  const records = await getAllMindMaps(userId);
-
+export async function mergeSelectedGraphs(records: MindMapRecord[]): Promise<MindMap> {
   const mergedNodes: GraphNode[] = [];
   const mergedEdges: GraphEdge[] = [];
   const seenLabels = new Map<string, string>(); // label → assigned id
 
-  // ── Step 1: Build merged nodes and within-document edges ──
+  // Step 1: Deduplicate nodes and rewire within-document edges
   for (const record of records) {
+    if (!record.graph) continue;
     const docPrefix = record.documentId;
 
-    // Nodes
-    for (const node of record.graph.nodes) {
-      const normalised = node.label.toLowerCase();
-      const existingId = seenLabels.get(normalised);
+    record.graph.nodes.forEach((node) => {
+      const normalized = node.label.toLowerCase();
+      const existingId = seenLabels.get(normalized);
 
       if (existingId) {
-        // Same concept in another doc — skip duplicate node
-        // but note its cross-doc presence via a self-referencing edge
+        // Same concept in another doc — self-link edge
         mergedEdges.push({
           source: existingId,
           target: existingId,
@@ -112,22 +111,22 @@ export async function getMergedGraph(userId: string): Promise<MindMap> {
         });
       } else {
         const newId = `${docPrefix}_${node.id}`;
-        seenLabels.set(normalised, newId);
+        seenLabels.set(normalized, newId);
         mergedNodes.push({
           ...node,
           id: newId,
           text: `[${record.documentName}] ${node.text}`,
         });
       }
-    }
+    });
 
     // Within-document edges
-    for (const edge of record.graph.edges) {
+    record.graph.edges.forEach((edge) => {
       const sourceId = seenLabels.get(
-        record.graph.nodes.find((n) => n.id === edge.source)?.label.toLowerCase() ?? ""
+        record.graph!.nodes.find((n) => n.id === edge.source)?.label.toLowerCase() ?? ""
       );
       const targetId = seenLabels.get(
-        record.graph.nodes.find((n) => n.id === edge.target)?.label.toLowerCase() ?? ""
+        record.graph!.nodes.find((n) => n.id === edge.target)?.label.toLowerCase() ?? ""
       );
 
       if (sourceId && targetId) {
@@ -137,13 +136,12 @@ export async function getMergedGraph(userId: string): Promise<MindMap> {
           relationship: edge.relationship,
         });
       }
-    }
+    });
   }
 
-  // ── Step 2: Use LLM to find cross-document connections ──
+  // Step 2: LLM cross-document connections
   if (records.length > 1 && mergedNodes.length > 0) {
     try {
-      // Build a summary of nodes grouped by document for the LLM
       const nodesSummary = mergedNodes
         .map((n) => {
           const docName = n.text.split("]")[0]?.replace("[", "") ?? "unknown";
@@ -156,8 +154,7 @@ export async function getMergedGraph(userId: string): Promise<MindMap> {
         messages: [
           {
             role: "system",
-            content:
-              "You find meaningful connections between concepts from different documents. Return ONLY valid JSON, no explanation, no markdown.",
+            content: "You find meaningful connections between concepts from different documents. Return ONLY valid JSON, no explanation, no markdown.",
           },
           {
             role: "user",
@@ -186,8 +183,6 @@ ${nodesSummary}`,
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as { edges: GraphEdge[] };
         const validIds = new Set(mergedNodes.map((n) => n.id));
-
-        // Only add edges where both source and target actually exist
         for (const edge of parsed.edges ?? []) {
           if (validIds.has(edge.source) && validIds.has(edge.target)) {
             mergedEdges.push(edge);
@@ -195,10 +190,32 @@ ${nodesSummary}`,
         }
       }
     } catch (err) {
-      // Don't fail the whole merge if cross-doc LLM call fails
       console.warn("Cross-document LLM call failed:", err);
     }
   }
 
   return { nodes: mergedNodes, edges: mergedEdges };
+}
+
+/**
+ * Merge all MindMaps for a user into one graph.
+ * Nodes with the same label across documents are deduplicated.
+ * A second LLM call finds cross-document connections between different nodes.
+ */
+export async function getMergedGraph(userId: string): Promise<MindMap> {
+  const records = await getAllMindMaps(userId);
+  const validRecords = records.filter(r => r?.graph) as MindMapRecord[];
+  return mergeSelectedGraphs(validRecords);
+}
+
+/**
+ * Delete a MindMap from DynamoDB (DB only, does NOT touch S3)
+ */
+export async function deleteMindMap(userId: string, documentId: string): Promise<void> {
+  await dynamo.send(
+    new DeleteCommand({
+      TableName: TABLE_NAME,
+      Key: { userId, documentId },
+    })
+  );
 }
