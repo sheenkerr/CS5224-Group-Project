@@ -1,11 +1,13 @@
+import axios from "axios";
 import { google } from "googleapis";
 import oauth2Client from "../../../middlewares/googleAuthMiddleware";
 import { createLogger } from "../../../utils/logger";
+import { use } from "react";
 
 const log = createLogger("Mindmapper");
-
+const sentFiles = new Set<string>();
 // Processes new files in the watched folder
-export async function processNewFiles(pageToken: string, folderId: string, folderName: string) {
+export async function processNewFiles(pageToken: string, folderId: string, folderName: string, email: string) {
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
     // Fetch the actual list of changes since the last page token
@@ -33,8 +35,35 @@ export async function processNewFiles(pageToken: string, folderId: string, folde
         const parents = file.parents ?? [];
         // Ensure that what we have is indeed a file in the watched folder
         if (parents.includes(watchedFolderId)) {
-            log.info(`New file detected in watched folder "${folderName}": ${file.name} (id: ${change.fileId})`);
+            // log.info(`New file detected in watched folder "${folderName}": ${file.name} (id: ${change.fileId})`);
             // TODO: trigger mind-map processing here
+            if (sentFiles.has(change.fileId!)) {
+                continue;
+            }
+            sentFiles.add(change.fileId!);
+            log.info(`New file detected: ${file.name}`);
+            console.log("processing controller: EMAIL BEING USED:", email);
+            await triggerEmail(file.name ?? "Unknown file", folderName, email);
         }
+    }
+}
+
+async function triggerEmail(fileName: string, folderName: string, email: string) {
+    try {
+        await axios.post(
+            "https://k7qshcvminxug77qohskxynbne0mpauh.lambda-url.us-east-2.on.aws/",
+            JSON.stringify({
+                subject: "New file uploaded",
+                message: `New file "${fileName}" uploaded to folder "${folderName}"`,
+                email: email
+            }),
+            {
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+    } catch (err) {
+        console.error("Failed to trigger email:", err);
     }
 }
