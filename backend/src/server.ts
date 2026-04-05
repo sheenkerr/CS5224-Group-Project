@@ -6,35 +6,54 @@ import { createLogger } from "./utils/logger";
 import { clerkAuth } from "./middlewares/auth";
 import mindMapRouter from "./applets/mindmapper/mindmapperRouter";
 import googleRouter from "./applets/mindmapper/handler";
-
-dotenv.config();
-
 import { connectToDatabase } from "./utils/database";
 
 
-const app = express();
-const PORT = process.env.BACKEND_PORT ?? 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/flowfox';
+dotenv.config();
 
+const app = express();
+const PORT = process.env.PORT ?? 4001; 
 const log = createLogger("Server");
 
+// -------------------
+// CORS configuration
+// -------------------
 app.use(cors({
-  origin: 'http://localhost:4000', // Allowed React frontend URL
-  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
+  origin: 'http://localhost:4000', // React frontend
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true, // if you need cookies/auth
 }));
 
-// Parse JSON request bodies
+// -------------------
+// Middleware
+// -------------------
 app.use(express.json());
 app.use(clerkAuth);
-app.use("/api/mindmapper/google", googleRouter); // Google endpoints
-app.use("/api/mindmapper", mindMapRouter);      // Graph endpoints
 
+// -------------------
+// Mindmapper routes (always available, no DB needed)
+// -------------------
+app.use("/api/mindmapper/google", googleRouter);
+app.use("/api/mindmapper", mindMapRouter);
+
+// -------------------
+// Any other routes (may require DB)
+// -------------------
 app.use("/api", apiRouter);
 
-// Start Server after connecting to DB
-connectToDatabase(MONGODB_URI)
-  .then(() => {
-    log.info("Successfully connected to MongoDB");
+// -------------------
+// Start server
+// -------------------
+async function startServer() {
+  try {
+    // Attempt to connect to MongoDB if URI exists
+    if (process.env.MONGODB_URI) {
+      await connectToDatabase(process.env.MONGODB_URI);
+      log.info("MongoDB connected successfully");
+    } else {
+      log.warn("No MongoDB URI provided, skipping DB connection");
+    }
+
     const server = app.listen(PORT, () => {
       log.info(`Server running on http://localhost:${PORT}`);
     });
@@ -45,10 +64,13 @@ connectToDatabase(MONGODB_URI)
         process.exit(0);
       });
     });
-  })
-  .catch((err) => {
-    log.error(`Failed to connect to MongoDB: ${err}`);
+
+  } catch (err) {
+    log.error("Failed to start server", err);
     process.exit(1);
-  });
+  }
+}
+
+startServer();
 
 export default app;

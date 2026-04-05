@@ -6,7 +6,7 @@ export function useApi() {
 
   const apiFetch = async (path: string, options: RequestInit = {}) => {
     const token = await getToken();
-    console.log("Clerk token:", token);
+    // console.log("Clerk token:", token);
     return fetch(`${API_BASE}${path}`, {
       ...options,
       headers: {
