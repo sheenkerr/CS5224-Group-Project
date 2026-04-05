@@ -43,18 +43,68 @@ export async function processNewFiles(activeChannel: IMindmapper) {
         if (parents.includes(activeChannel.folder_id)) {
             const fileName = file.name ?? "Unknown file";
 
-            // Add the file name to our simple list
-            newFileNames.push(fileName);
+            // Move the file to S3
+            await transferDriveFileToS3(drive, activeChannel._id.toString(), change.fileId!, fileName);
 
             // Trigger your email logic
-            console.log(`New file detected: ${fileName}`);
-            // console.log("processing controller: EMAIL BEING USED:", activeChannel.email);
-            // await triggerEmail(fileName, activeChannel.folder_name, activeChannel.email);
+            console.log("processing controller: EMAIL BEING USED:", activeChannel.email);
+            await triggerEmail(fileName, activeChannel.folder_name, activeChannel.email);
         }
     }
 
     // Return the list of file names so our webhook handler knows what happened
     return newFileNames;
+}
+
+export async function transferDriveFileToS3(drive: any, mindmapperId: string, fileId: string, fileName: string) {
+
+    const awsRegion = process.env.AWS_REGION;
+    const accessKey = process.env.AWS_ACCESS_KEY_ID;
+    const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+
+    if (!awsRegion || !accessKey || !secretKey) {
+        throw new Error("Missing AWS credentials in environment variables!");
+    }
+
+    const s3Client = new S3Client({
+        region: awsRegion,
+        credentials: {
+            accessKeyId: accessKey,
+            secretAccessKey: secretKey,
+        }
+    });
+
+    try {
+        const driveResponse = await drive.files.get(
+            { fileId: fileId, alt: 'media' },
+            { responseType: 'stream' }
+        );
+
+        // Prepare the S3 Upload
+        const bucketName = process.env.S3_BUCKET_NAME;
+
+        const parallelUploads3 = new Upload({
+            client: s3Client,
+            params: {
+                Bucket: bucketName,
+                Key: `mindmappers/${mindmapperId}/${fileName}`,
+                Body: driveResponse.data,
+            },
+        });
+
+        parallelUploads3.on("httpUploadProgress", (progress) => {
+            console.log(`Uploading ${fileName} to S3: ${progress.loaded} / ${progress.total} bytes`);
+        });
+
+        // Execute the upload
+        await parallelUploads3.done();
+        console.log(`Successfully transferred ${fileName} to S3!`);
+
+        return true;
+    } catch (error) {
+        console.error(`Failed to transfer ${fileName} to S3:`, error);
+        throw error;
+    }
 }
 
 async function triggerEmail(fileName: string, folderName: string, email: string) {
