@@ -4,7 +4,7 @@
 // Place in: src/pages/MindMapPage.tsx
 // ─────────────────────────────────────────────
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import MindMapViewer from "../components/MindMapViewer";
 import { MindMap } from "../../backend/src/applets/mindmapper/types";
 
@@ -30,6 +30,74 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
 
   const [viewMode, setViewMode] = useState<"single" | "merged">("single");
   const [mergedGraph, setMergedGraph] = useState<MindMap | null>(null);
+
+  const oauthCalled = useRef(false);
+
+  // Handle Notion OAuth callback
+  useEffect(() => {
+    const savedText = localStorage.getItem("mindmap_documentText");
+    const savedName = localStorage.getItem("mindmap_documentName");
+    const savedExtPrompt = localStorage.getItem("mindmap_extractionPrompt");
+    const savedExpPrompt = localStorage.getItem("mindmap_exportPrompt");
+
+    if (savedText !== null && !documentText) setDocumentText(savedText);
+    if (savedName !== null) setDocumentName(savedName);
+    if (savedExtPrompt !== null) setExtractionPrompt(savedExtPrompt);
+    if (savedExpPrompt !== null) setExportPrompt(savedExpPrompt);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get("code");
+
+    if (code && !oauthCalled.current) {
+      oauthCalled.current = true;
+      // Clear code from URL immediately to prevent strict-mode double fetch
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      setLoading(true);
+      fetch(`${API_BASE}/api/mindmapper/notion-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.access_token) {
+            setNotionApiKey(data.access_token);
+            // Optionally clear localStorage now that we're back
+            localStorage.removeItem("mindmap_documentText");
+            localStorage.removeItem("mindmap_documentName");
+            localStorage.removeItem("mindmap_extractionPrompt");
+            localStorage.removeItem("mindmap_exportPrompt");
+          } else {
+            setError(data.error || "Failed to exchange Notion token");
+          }
+        })
+        .catch((err) => setError(err.message))
+        .finally(() => setLoading(false));
+    }
+  }, []);
+
+  const handleLoginWithNotion = async () => {
+    try {
+      setLoading(true);
+      // Save state to restore after redirect
+      localStorage.setItem("mindmap_documentText", documentText);
+      localStorage.setItem("mindmap_documentName", documentName);
+      localStorage.setItem("mindmap_extractionPrompt", extractionPrompt);
+      localStorage.setItem("mindmap_exportPrompt", exportPrompt);
+
+      const res = await fetch(`${API_BASE}/api/mindmapper/notion-auth-url`);
+      const data = await res.json();
+      if (data.success && data.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        throw new Error(data.error || "Failed to get auth URL");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error initiating Notion OAuth");
+      setLoading(false);
+    }
+  };
 
   const handleMergeView = async () => {
     const res = await fetch(`${API_BASE}/api/mindmapper/test-user/merged`);
@@ -125,94 +193,142 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
           Paste any document text and we'll extract a knowledge graph for you.
         </p>
 
-        {/* Document name */}
-        <label style={labelStyle}>
-          Document Name
-          <input
-            value={documentName}
-            onChange={(e) => setDocumentName(e.target.value)}
-            style={inputStyle}
-            placeholder="e.g. Research Paper"
-          />
-        </label>
+        {/* ── Document extraction inputs ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Document name */}
+          <label style={labelStyle}>
+            Document Name
+            <input
+              value={documentName}
+              onChange={(e) => setDocumentName(e.target.value)}
+              style={inputStyle}
+              placeholder="e.g. Research Paper"
+            />
+          </label>
 
-        {/* Notion API Key */}
-        <label style={labelStyle}>
-          Notion API Key
-          <input
-            value={notionApiKey}
-            onChange={(e) => setNotionApiKey(e.target.value)}
-            style={inputStyle}
-            placeholder="Enter your Notion secret key"
-          />
-        </label>
-        {/* Export Prompt */}
-        <label style={labelStyle}>
-          Export Prompt (e.g., "Methods section")
-          <input
-            value={exportPrompt}
-            onChange={(e) => setExportPrompt(e.target.value)}
-            style={inputStyle}
-            placeholder="Describe which part of graph to export"
-          />
-        </label>
-        {/* Extraction prompt */}
-        <label style={labelStyle}>
-          What to extract
-          <input
-            value={extractionPrompt}
-            onChange={(e) => setExtractionPrompt(e.target.value)}
-            style={inputStyle}
-            placeholder="e.g. key concepts, authors, events..."
-          />
-        </label>
+          {/* Extraction prompt */}
+          <label style={labelStyle}>
+            What to extract
+            <input
+              value={extractionPrompt}
+              onChange={(e) => setExtractionPrompt(e.target.value)}
+              style={inputStyle}
+              placeholder="e.g. key concepts, authors, events..."
+            />
+          </label>
 
-        {/* Document text */}
-        <label style={labelStyle}>
-          Document Text
-          <textarea
-            value={documentText}
-            onChange={(e) => setDocumentText(e.target.value)}
-            style={{ ...inputStyle, height: 200, resize: "vertical" }}
-            placeholder="Paste your document text here..."
-          />
-        </label>
+          {/* Document text */}
+          <label style={labelStyle}>
+            Document Text
+            <textarea
+              value={documentText}
+              onChange={(e) => setDocumentText(e.target.value)}
+              style={{ ...inputStyle, height: 200, resize: "vertical" }}
+              placeholder="Paste your document text here..."
+            />
+          </label>
 
-        {/* Extract button */}
-        <button
-          onClick={handleExtract}
-          disabled={loading}
+          {/* Extract button */}
+          <button
+            onClick={handleExtract}
+            disabled={loading}
+            style={{
+              padding: "12px",
+              background: loading ? "#475569" : "#3b82f6",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          >
+            {loading ? "Extracting..." : "Extract Graph →"}
+          </button>
+        </div>
+
+        {/* ── Notion Export Group ── */}
+        <div
           style={{
-            padding: "12px",
-            background: loading ? "#475569" : "#3b82f6",
-            color: "#fff",
-            border: "none",
+            background: "#1e1b4b", // deep indigo background to hint at export/Notion
+            border: "1px solid #4338ca",
             borderRadius: 8,
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
-        >
-          {loading ? "Extracting..." : "Extract Graph →"}
-        </button>
-        {/* Export to Notion button */}
-        <button
-          onClick={handleExport}
-          disabled={loading || !graph}
-          style={{
-            padding: "12px",
-            background: loading ? "#475569" : "#4f46e5",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 700,
-            fontSize: 14,
+            padding: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
             marginTop: 8,
-            cursor: loading ? "not-allowed" : "pointer",
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
           }}
         >
-          Export to Notion
-        </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#e0e7ff" }}>
+              Export to Notion
+            </h3>
+          </div>
+
+          {/* Notion Integration */}
+          {notionApiKey ? (
+            <div style={{ ...labelStyle, color: "#34d399", flexDirection: "row", alignItems: "center" }}>
+              ✅ Connected to Notion
+            </div>
+          ) : (
+            <button
+              onClick={handleLoginWithNotion}
+              disabled={loading}
+              style={{
+                padding: "8px",
+                background: "#ffffff",
+                color: "#000000",
+                border: "1px solid #d1d5db",
+                borderRadius: 8,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: loading ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png"
+                alt="Notion"
+                style={{ width: 16, height: 16 }}
+              />
+              Login with Notion
+            </button>
+          )}
+
+          {/* Export Prompt */}
+          <label style={{ ...labelStyle, color: "#a5b4fc" }}>
+            Export Instruction
+            <input
+              value={exportPrompt}
+              onChange={(e) => setExportPrompt(e.target.value)}
+              style={{ ...inputStyle, background: "#312e81", border: "1px solid #4f46e5" }}
+              placeholder="e.g., Methods section"
+            />
+          </label>
+
+          {/* Export to Notion button */}
+          <button
+            onClick={handleExport}
+            disabled={loading || !graph || !notionApiKey}
+            style={{
+              padding: "12px",
+              background: loading || !graph || !notionApiKey ? "#3730a3" : "#4f46e5",
+              color: loading || !graph || !notionApiKey ? "#818cf8" : "#ffffff",
+              border: "none",
+              borderRadius: 8,
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: loading || !graph || !notionApiKey ? "not-allowed" : "pointer",
+            }}
+          >
+            Export to Notion
+          </button>
+        </div>
         <button
           onClick={handleMergeView}
           style={{
