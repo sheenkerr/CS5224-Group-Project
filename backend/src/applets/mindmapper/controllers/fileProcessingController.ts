@@ -1,16 +1,18 @@
 import axios from "axios";
 import { google } from "googleapis";
-import oauth2Client from "../../../middlewares/googleAuthMiddleware";
 import { createLogger } from "../../../utils/logger";
 import { IMindmapper } from "../../../models/mindmapper_model";
 import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
+import { getUserOAuthClient } from "../controllers/googleController";
 
 const log = createLogger("Mindmapper");
 
 // Processes new files in the watched folder
 // We pass the entire Mongoose document instead of individual strings
 export async function processNewFiles(activeChannel: IMindmapper) {
+
+    const oauth2Client = await getUserOAuthClient(activeChannel.refresh_token);
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
     // Fetch the actual list of changes since the last page token
@@ -99,6 +101,16 @@ export async function transferDriveFileToS3(drive: any, mindmapperId: string, fi
         // Execute the upload
         await parallelUploads3.done();
         console.log(`Successfully transferred ${fileName} to S3!`);
+
+        // Alert the mindmapper to start processing the new file
+        await axios.post(
+            "http://localhost:4001/api/mindmapper/s3-webhook",
+            JSON.stringify({
+                "bucketName": bucketName,
+                "objectKey": `mindmappers/${mindmapperId}/${fileName}`,
+                "mindmapperAppletId": mindmapperId
+            })
+        );
 
         return true;
     } catch (error) {
