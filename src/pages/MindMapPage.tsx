@@ -77,7 +77,9 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
     }
   };
 
-  const handleMergeSelected = async (records: MindMapRecord[]) => {
+  const handleMergeSelected = async (records: MindMapRecord[]): Promise<MindMapRecord | null> => {
+    if (!records.length) return null;
+
     const documentIds = records.map(r => r.documentId);
     const mergedName =
       records.map(r => r.documentName).join(" + ") + " merged";
@@ -89,10 +91,14 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
 
     const data = await res.json();
 
-    if (data.success) {
-      setMergedGraph(data.graph);
+    if (data.success && data.record) {
+      setMergedGraph(data.record.graph);
       setViewMode("merged");
+      setActiveDocumentName(data.record.documentName);
+      return data.record; // ✅ return full merged record
     }
+
+    return null;
   };
 
   function mergeRecordsClientSide(records: MindMapRecord[]): MindMap {
@@ -176,8 +182,12 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
       setViewMode("single");
     }}
     onViewMerged={async (records) => {
-     await handleMergeSelected(records);
-    setViewMode("merged");
+    const mergedRecord = await handleMergeSelected(records);
+    if (mergedRecord?.documentId) {
+      // Highlight merged doc
+      setActiveDocumentName(mergedRecord.documentName);
+    }
+    return mergedRecord; // ✅ matches new type: Promise<MindMapRecord | null>
   }}
   />
 ) : (

@@ -32,8 +32,8 @@ export async function saveMindMap(
   documentName: string,
   graph: MindMap | undefined,
   extractionPrompt: string,
-  status: "processing" | "completed" | "failed" // ✅ NEW
-): Promise<void> {
+  status: "processing" | "completed" | "failed"
+): Promise<MindMapRecord> {
   const record: MindMapRecord = {
     userId,
     documentId,
@@ -50,6 +50,8 @@ export async function saveMindMap(
       Item: record,
     })
   );
+
+  return record;
 }
 
 /**

@@ -72,14 +72,14 @@ router.post("/extract", async (req, res) => {
 
 router.post("/merge", async (req, res) => {
   const userId = (req as any).userId;
-  const { documentIds, mergedName }: { userId: string; documentIds: string[]; mergedName?: string } = req.body;
+  const { documentIds, mergedName }: { documentIds: string[]; mergedName?: string } = req.body;
 
   if (!userId || !documentIds?.length) {
     return res.status(400).json({ success: false, error: "Missing userId or documentIds" });
   }
 
   try {
-    // Fetch only selected docs
+    // Fetch only selected documents
     const records: (MindMapRecord | null)[] = await Promise.all(
       documentIds.map((id: string) => getMindMap(userId, id))
     );
@@ -89,17 +89,24 @@ router.post("/merge", async (req, res) => {
     // Merge using LLM
     const mergedGraph = await mergeSelectedGraphs(validRecords);
     const mergedDocumentId = `merged-${uuidv4()}`;
+    const finalName = mergedName || "Merged Document";
 
-    await saveMindMap(
+    // Save and get full record
+    const mergedRecord: MindMapRecord = await saveMindMap(
       userId,
       mergedDocumentId,
-      mergedName || "Merged Document",
+      finalName,
       mergedGraph,
       "merged nodes",
       "completed"
     );
 
-    return res.status(200).json({ success: true, mergedDocumentId, graph: mergedGraph });
+    // ✅ Return the full merged record
+    return res.status(200).json({
+      success: true,
+      record: mergedRecord,
+    });
+
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ success: false, error: message });
