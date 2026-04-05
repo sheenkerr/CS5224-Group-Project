@@ -2,7 +2,7 @@ import React from "react";
 import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
 import { Dialog } from "@mui/material";
-import { useAuth } from "@clerk/clerk-react";
+import { useUser, useAuth } from "@clerk/clerk-react";
 
 /** Shape of the folder selected by the Google Picker */
 type SelectedFolder = {
@@ -38,12 +38,14 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
 
     /** Clerk's user id */
     const { userId, isLoaded: authLoaded, getToken } = useAuth();
+    const { isLoaded, isSignedIn, user } = useUser();
 
     const completeSetup = async () => {
         /** Send the folder ID and the folder name to our backend */
 
         const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
             userId: userId,
+            email: user!.primaryEmailAddress!.emailAddress,
             folderId: selectedFolder?.id,
             folderName: selectedFolder?.name,
         });

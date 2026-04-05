@@ -1,17 +1,18 @@
-import { MongoClient, Db } from "mongodb";
+import mongoose from 'mongoose';
+import { Db } from 'mongodb';
 
 let db: Db;
 
 export async function connectToDatabase(uri: string): Promise<Db> {
-  const client = new MongoClient(uri);
-  await client.connect();
-  db = client.db();
-  return db;
-}
+  await mongoose.connect(uri);
 
-export function getDb(): Db {
-  if (!db) {
-    throw new Error("Database not initialized");
+  console.log("Mongoose connected successfully!");
+
+  if (mongoose.connection.db) {
+    db = mongoose.connection.db;
+  } else {
+    throw new Error("Mongoose connected, but native db object is missing.");
   }
+
   return db;
 }

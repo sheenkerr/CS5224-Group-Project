@@ -22,6 +22,7 @@ router.get("/google/callback", async (req, res) => {
     const result = await handleGoogleCallback(req);
 
     const frontendUrl = process.env.FRONTEND_URL;
+
     const redirectTarget = `${frontendUrl}/applets/Mindmappers/setup?success=${result}`;
 
     res.redirect(redirectTarget);
@@ -51,7 +52,7 @@ router.get("/google/access-token", (req, res) => {
 
 /** Register a Google Drive watch channel for the selected folder */
 router.post("/google/setup-listener", async (req, res) => {
-    const { userId, folderId, folderName } = req.body;
+    const { userId, email, folderId, folderName } = req.body;
 
     if (!folderId || !folderName) {
         res.status(400).json({
@@ -62,7 +63,7 @@ router.post("/google/setup-listener", async (req, res) => {
     }
 
     try {
-        await setupDriveWatch(folderId, folderName, userId);
+        await setupDriveWatch(folderId, folderName, userId, email);
         res.status(200).json({
             message: "Drive watch registered",
             success: true

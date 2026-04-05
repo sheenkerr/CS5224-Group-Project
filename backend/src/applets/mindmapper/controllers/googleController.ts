@@ -2,7 +2,6 @@ import { google } from "googleapis";
 import oauth2Client from "../../../middlewares/googleAuthMiddleware";
 import { createLogger } from "../../../utils/logger";
 import { processNewFiles } from "./fileProcessingController";
-import { getDb } from "../../../utils/database";
 import Mindmapper from "../../../models/mindmapper_model";
 
 const log = createLogger("Mindmapper");
@@ -19,7 +18,6 @@ export function getGoogleLoginUrl() {
     const SCOPE = [
         "https://www.googleapis.com/auth/drive.metadata.readonly",
         "https://www.googleapis.com/auth/drive.readonly",
-        "https://www.googleapis.com/auth/userinfo.email",
     ];
 
     const authUrl = oauth2Client.generateAuthUrl({
@@ -49,12 +47,12 @@ export async function handleGoogleCallback(req: any) {
         version: "v2",
     });
 
-    try {
-        const { data } = await oauth2.userinfo.get();
-        (global as any).googleUserEmail = data.email;
-    } catch (err) {
-        console.error("Failed to get user email:", err);
-    }
+    // try {
+    //     const { data } = await oauth2.userinfo.get();
+    //     (global as any).googleUserEmail = data.email;
+    // } catch (err) {
+    //     console.error("Failed to get user email:", err);
+    // }
     return true;
 }
 
@@ -62,20 +60,9 @@ export async function handleGoogleCallback(req: any) {
  * Register a Google Drive changes watch channel for the given folder.
  * Google will POST to our webhook endpoint whenever anything changes.
  */
-export async function setupDriveWatch(folderId: string, folderName: string, userId: string) {
+export async function setupDriveWatch(folderId: string, folderName: string, userId: string, email: string) {
 
     const drive = google.drive({ version: "v3", auth: oauth2Client });
-
-    // Get the user's email address
-    const aboutRes = await drive.about.get({
-        fields: "user(emailAddress)"
-    });
-
-    const userEmail = aboutRes.data.user?.emailAddress;
-
-    if (!userEmail) {
-        throw new Error("Could not retrieve the user's email address from Google.");
-    }
 
     // Get a baseline page token so we only see changes from NOW onward
     const tokenRes = await drive.changes.getStartPageToken({});
@@ -95,7 +82,7 @@ export async function setupDriveWatch(folderId: string, folderName: string, user
 
     const partialApplet = new Mindmapper({
         user_id: userId,
-        email: userEmail,
+        email: email,
         folder_id: folderId,
         folder_name: folderName,
         page_token: pageToken,

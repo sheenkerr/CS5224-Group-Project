@@ -14,10 +14,9 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
         const queryString = window.location.search;
         const params = new URLSearchParams(queryString);
         const success = params.get('success');
-        if (success) {
+        if (success == "true") {
             setStage(1);
         }
-
     }, []);
 
     return (
