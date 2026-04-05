@@ -2,7 +2,7 @@ import React from "react";
 import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
 import { Dialog } from "@mui/material";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";
 
 /** Shape of the folder selected by the Google Picker */
 type SelectedFolder = {
@@ -16,7 +16,7 @@ type MindmapperSetupProps = {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8001").replace(/\/$/, "");
 
-/** Dynamically load a script tag if it hasn't been loaded yet */
+/** Dynamically load a script tag if it hasn't been loaded yet for the google document selecter */
 function loadScript(src: string): Promise<void> {
     return new Promise((resolve, reject) => {
         if (document.querySelector(`script[src="${src}"]`)) {
@@ -35,11 +35,15 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     const [open, setOpen] = React.useState(true);
     const [selectedFolder, setSelectedFolder] = React.useState<SelectedFolder | null>(null);
     const [pickerLoading, setPickerLoading] = React.useState(false);
-    
+
+    /** Clerk's user id */
+    const { userId, isLoaded: authLoaded, getToken } = useAuth();
+
     const completeSetup = async () => {
         /** Send the folder ID and the folder name to our backend */
-    
+
         const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
+            userId: userId,
             folderId: selectedFolder?.id,
             folderName: selectedFolder?.name,
         });
@@ -52,16 +56,9 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         }
     };
 
-    // const googleLogin = async () => {
-    //     const response = await axios.get(`${API_BASE_URL}/api/mindmapper/google/login-url`);
-    //     const authUrl = response.data.authUrl;
-    //     window.location.href = authUrl;
-    // };
     const googleLogin = async () => {
         const response = await axios.get(`${API_BASE_URL}/api/mindmapper/google/login-url`);
-        console.log("RESPONSE:", response.data);  
         const authUrl = response.data.authUrl;
-        console.log("URL:", authUrl);             
         window.location.href = authUrl;
     };
 

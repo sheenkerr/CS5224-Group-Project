@@ -21,7 +21,9 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "googleapis": "^171.4.0",
-    "groq-sdk": "^1.1.1"
+    "groq-sdk": "^1.1.1",
+    "mongodb": "^7.1.1",
+    "mongoose": "^9.4.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
