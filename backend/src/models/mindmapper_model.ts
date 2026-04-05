@@ -2,11 +2,12 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IMindmapper extends Document {
     user_id: string;
+    email: string;
     folder_id: string;
     folder_name: string;
+    page_token: string;
     channel_id?: string;
     resource_id?: string;
-    page_token?: string;
     expiration?: Date;
     status: string;
     created_at: Date;

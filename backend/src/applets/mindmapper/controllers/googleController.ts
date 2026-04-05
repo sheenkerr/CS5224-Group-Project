@@ -163,12 +163,7 @@ export async function handleDriveWebhook(headers: Record<string, string | string
 
         console.log(`Drive webhook: change detected (state: ${resourceState}) for folder: ${activeChannel.folder_name}`);
 
-        // processNewFiles(
-        //     activeChannel.page_token!,
-        //     activeChannel.folder_id,
-        //     activeChannel.folder_name,
-        //     activeChannel.user_id
-        // );
+        const newlyAddedFiles = await processNewFiles(activeChannel);
 
     } catch (error) {
         // Catch any database connection errors or invalid ID formats
