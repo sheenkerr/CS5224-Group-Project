@@ -1,14 +1,9 @@
-// ─────────────────────────────────────────────
-// MindMapViewer.tsx
-// Renders a MindMap as an interactive graph using React Flow
-// Place in: src/components/MindMapViewer.tsx
-// ─────────────────────────────────────────────
-
 import { useCallback, useState } from "react";
 import ReactFlow, {
   Node,
   Edge,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   useNodesState,
@@ -17,20 +12,20 @@ import ReactFlow, {
   NodeMouseHandler,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { MindMap, GraphNode } from "../../backend/src/applets/mindmapper/types";
+import { GraphNode, MindMap } from "../../backend/src/applets/mindmapper/types";
+
 
 interface MindMapViewerProps {
   graph: MindMap;
   documentName?: string;
 }
 
-// Colour by node type
 const TYPE_COLORS: Record<string, string> = {
   concept: "#3b82f6",
-  person:  "#f59e0b",
-  event:   "#10b981",
-  place:   "#8b5cf6",
-  other:   "#6b7280",
+  person:  "#f97316",
+  event:   "#a78bfa",
+  place:   "#34d399",
+  other:   "#64748b",
 };
 
 function buildLayout(graphNodes: GraphNode[]): Node[] {
@@ -41,7 +36,6 @@ function buildLayout(graphNodes: GraphNode[]): Node[] {
   return graphNodes.map((n, i) => {
     const row = Math.floor(i / cols);
     const col = i % cols;
-    // Add some randomness so it doesn't look like a grid
     const jitterX = (Math.random() - 0.5) * 40;
     const jitterY = (Math.random() - 0.5) * 40;
     return {
@@ -78,29 +72,28 @@ export default function MindMapViewer({ graph, documentName }: MindMapViewerProp
     source: e.source,
     target: e.target,
     label: e.relationship,
-    labelStyle: { fontSize: 10, fill: "#374151" },
-    labelBgStyle: { fill: "#f9fafb", opacity: 0.8 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#9ca3af" },
-    style: { stroke: "#9ca3af", strokeWidth: 1.5 },
+    labelStyle: { fontSize: 10, fill: "#94a3b8" },
+    labelBgStyle: { fill: "#1e293b", opacity: 0.85 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "#475569" },
+    style: { stroke: "#475569", strokeWidth: 1.5 },
     animated: false,
   }));
 
   const [nodes, , onNodesChange] = useNodesState(initialNodes);
   const [edges, , onEdgesChange] = useEdgesState(initialEdges);
 
-  // Sidebar: show node details on click
-  const [selected, setSelected] = useState<{ label: string; text: string; type: string } | null>(null);
+  const [selected, setSelected] = useState<{ id: string; label: string; text: string; type: string } | null>(null);
   const [search, setSearch] = useState("");
 
   const onNodeClick: NodeMouseHandler = useCallback((_evt, node) => {
     setSelected({
+      id: node.id,
       label: node.data.label,
       text: node.data.text,
       type: node.data.type,
     });
   }, []);
 
-  // Search: highlight matching nodes
   const filteredNodeIds = search.trim()
     ? nodes
         .filter((n) =>
@@ -112,30 +105,35 @@ export default function MindMapViewer({ graph, documentName }: MindMapViewerProp
 
   const styledNodes = nodes.map((n) => ({
     ...n,
+    data: {
+      ...n.data,
+      isSelected: selected?.id === n.id,
+    },
     style: {
       ...n.style,
-      opacity:
-        filteredNodeIds.length === 0 || filteredNodeIds.includes(n.id) ? 1 : 0.2,
-      boxShadow:
-        filteredNodeIds.includes(n.id) ? "0 0 0 3px #fbbf24" : undefined,
+      opacity: filteredNodeIds.length === 0 || filteredNodeIds.includes(n.id) ? 1 : 0.2,
+      boxShadow: selected?.id === n.id
+        ? "0 0 0 3px #fff, 0 0 12px rgba(255,255,255,0.3)"
+        : filteredNodeIds.includes(n.id)
+        ? "0 0 0 3px #facc15, 0 0 8px rgba(250,204,21,0.4)"
+        : undefined,
     },
   }));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0f172a", borderRadius: "inherit" }}>
       {/* Header */}
-      <div
-        style={{
-          padding: "12px 16px",
-          background: "#1e293b",
-          color: "#f8fafc",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: 15 }}>
+      <div style={{
+        padding: "10px 16px",
+        background: "#293548",
+        borderBottom: "1px solid rgba(255,255,255,0.18)",
+        color: "#f8fafc",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        flexShrink: 0,
+      }}>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>
           🧠 {documentName || "Mind Map"}
         </span>
         <input
@@ -146,18 +144,18 @@ export default function MindMapViewer({ graph, documentName }: MindMapViewerProp
             marginLeft: "auto",
             padding: "5px 10px",
             borderRadius: 6,
-            border: "1px solid #475569",
-            background: "#334155",
+            border: "1px solid rgba(255,255,255,0.15)",
+            background: "#0f172a",
             color: "#f8fafc",
             fontSize: 13,
             width: 200,
+            outline: "none",
           }}
         />
       </div>
 
       {/* Main: graph + sidebar */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* Graph */}
         <div style={{ flex: 1 }}>
           <ReactFlow
             nodes={styledNodes}
@@ -166,53 +164,56 @@ export default function MindMapViewer({ graph, documentName }: MindMapViewerProp
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
             fitView
+            proOptions={{ hideAttribution: true }}
           >
-            <Background color="#e2e8f0" gap={20} />
-            <Controls />
+            <Background
+              color="#1e293b"
+              gap={24}
+              variant={BackgroundVariant.Dots}
+            />
+            <Controls style={{ background: "#1e293b", border: "1px solid rgba(255,255,255,0.1)" }} />
             <MiniMap
               nodeColor={(n) => TYPE_COLORS[n.data?.type || "other"]}
-              style={{ background: "#f1f5f9" }}
+              nodeStrokeColor={(n) => n.data?.isSelected ? "#facc15" : "transparent"}
+              nodeStrokeWidth={4}
+              style={{ background: "#1e293b", border: "1px solid rgba(255,255,255,0.08)" }}
             />
           </ReactFlow>
         </div>
 
-        {/* Sidebar: node detail */}
+        {/* Sidebar */}
         {selected && (
-          <div
-            style={{
-              width: 260,
-              background: "#f8fafc",
-              borderLeft: "1px solid #e2e8f0",
-              padding: 16,
-              overflow: "auto",
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>
+          <div style={{
+            width: 240,
+            background: "#1e293b",
+            borderLeft: "1px solid rgba(255,255,255,0.08)",
+            padding: 16,
+            overflow: "auto",
+            flexShrink: 0,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <span style={{ fontWeight: 700, fontSize: 14, color: "#f8fafc" }}>
                 {selected.label}
               </span>
               <button
                 onClick={() => setSelected(null)}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#94a3b8" }}
               >
                 ×
               </button>
             </div>
-            <span
-              style={{
-                display: "inline-block",
-                marginTop: 6,
-                padding: "2px 8px",
-                borderRadius: 99,
-                background: TYPE_COLORS[selected.type],
-                color: "#fff",
-                fontSize: 11,
-              }}
-            >
+            <span style={{
+              display: "inline-block",
+              marginTop: 6,
+              padding: "2px 8px",
+              borderRadius: 99,
+              background: TYPE_COLORS[selected.type],
+              color: "#fff",
+              fontSize: 11,
+            }}>
               {selected.type}
             </span>
-            <p style={{ marginTop: 12, fontSize: 13, color: "#475569", lineHeight: 1.6 }}>
+            <p style={{ marginTop: 12, fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
               {selected.text || "No excerpt available."}
             </p>
           </div>
@@ -220,19 +221,17 @@ export default function MindMapViewer({ graph, documentName }: MindMapViewerProp
       </div>
 
       {/* Legend */}
-      <div
-        style={{
-          padding: "8px 16px",
-          background: "#f1f5f9",
-          borderTop: "1px solid #e2e8f0",
-          display: "flex",
-          gap: 16,
-          flexShrink: 0,
-        }}
-      >
+      <div style={{
+        padding: "8px 16px",
+        background: "#293548",
+        borderTop: "1px solid rgba(255,255,255,0.18)",
+        display: "flex",
+        gap: 16,
+        flexShrink: 0,
+      }}>
         {Object.entries(TYPE_COLORS).map(([type, color]) => (
-          <span key={type} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#475569" }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: color, display: "inline-block" }} />
+          <span key={type} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#94a3b8" }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block" }} />
             {type}
           </span>
         ))}

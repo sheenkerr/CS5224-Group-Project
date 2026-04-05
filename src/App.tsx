@@ -6,52 +6,54 @@ import Applets from "./pages/Applets";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
-import MindMapPage from "./pages/MindMapPage";
 import Mindmapper from "./pages/Applets/Mindmapper/Mindmapper";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "";
 
-function App(): React.ReactElement {
-	return (
-		<ClerkProvider
-			publishableKey={PUBLISHABLE_KEY}
-			afterSignOutUrl={import.meta.env.BASE_URL}
-			signInUrl={`${import.meta.env.BASE_URL}login`}
-			signUpUrl={`${import.meta.env.BASE_URL}register`}
-			signInFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
-			signUpFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
-		>
-			<Router basename={import.meta.env.BASE_URL}>
-				<Routes>
-					<Route path="/" element={<LandingPage />} />
-					<Route path="/login/*" element={<Login />} />
-					<Route path="/register/*" element={<Register />} />
-					<Route path="/applets" element={<Applets />} />
-					<Route path="/dashboard" element={<Dashboard />} />
-					<Route path="/mindmap" element={
-					<>
-						<SignedIn>
-						<MindMapPage />
-						</SignedIn>
-						<SignedOut>
-						<RedirectToSignIn />
-						</SignedOut>
-					</>
-					} />
-					<Route
-						path="/applets/Mindmappers/setup"
-						element={<Mindmapper isSetup={true} />}
-					/>
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => (
+  <>
+    <SignedIn>{children}</SignedIn>
+    <SignedOut><RedirectToSignIn /></SignedOut>
+  </>
+);
 
-					{/* 2. The View Route */}
-					<Route
-						path="/applets/Mindmappers/view"
-						element={<Mindmapper isSetup={false} />}
-					/>
-				</Routes>
-			</Router>
-		</ClerkProvider>
-	);
+function App(): React.ReactElement {
+  return (
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      afterSignOutUrl={import.meta.env.BASE_URL}
+      signInUrl={`${import.meta.env.BASE_URL}login`}
+      signUpUrl={`${import.meta.env.BASE_URL}register`}
+      signInFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
+      signUpFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
+    >
+      <Router basename={import.meta.env.BASE_URL}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login/*" element={<Login />} />
+          <Route path="/register/*" element={<Register />} />
+          <Route path="/applets" element={<Applets />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route
+            path="/applets/Mindmappers/setup"
+            element={
+              <ProtectedRoute>
+                <Mindmapper isSetup={true} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/applets/Mindmappers/view"
+            element={
+              <ProtectedRoute>
+                <Mindmapper isSetup={false} />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Router>
+    </ClerkProvider>
+  );
 }
 
 export default App;
