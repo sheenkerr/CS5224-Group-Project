@@ -5,6 +5,18 @@ import Groq from "groq-sdk";
 import axios from "axios";
 import type { MindMap } from "./types";
 
+/**
+ * AI Usage Declaration
+ *
+ * Tool Used: Gemini 3.1 Pro
+ *
+ * Prompt:
+ * - How may I develop a login with notion oAuth feature so users do not need to generate an API key to utilize export to notion?
+ *
+ * How the AI Output Was Used:
+ * - Used a portion of suggested code for the below
+*/
+
 const NOTION_API_VERSION = "2022-06-28";
 
 // Convert graph to readable notes using Groq
@@ -49,7 +61,7 @@ async function findFirstPage(notionKey: string): Promise<string> {
 
 }
 
-// Gemini 3 Flash was utilized to generate the code for this function
+// Gemini 3.1 Pro was utilized to generate the code for this function
 // Append blocks to a Notion page (parsed from Markdown)
 async function appendToPage(
   notionKey: string,

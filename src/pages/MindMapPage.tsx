@@ -267,6 +267,17 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
             </h3>
           </div>
 
+          {/**
+           * AI Usage Declaration
+           *
+           * Tool Used: Gemini 3.1 Pro
+           *
+           * Prompt:
+           * - How may I develop a login with notion oAuth feature so users do not need to generate an API key to utilize export to notion?
+           *
+           * How the AI Output Was Used:
+           * - Used a portion of suggested code for the below
+           */}
           {/* Notion Integration */}
           {notionApiKey ? (
             <div style={{ ...labelStyle, color: "#34d399", flexDirection: "row", alignItems: "center" }}>
@@ -311,6 +322,17 @@ export default function MindMapPage({ prefillText, prefillName }: MindMapPagePro
             />
           </label>
 
+          {/**
+           * AI Usage Declaration
+           *
+           * Tool Used: Gemini 3.1 Pro
+           *
+           * Prompt:
+           * - How may I develop a login with notion oAuth feature so users do not need to generate an API key to utilize export to notion?
+           *
+           * How the AI Output Was Used:
+           * - Used a portion of suggested code for the below
+           */}
           {/* Export to Notion button */}
           <button
             onClick={handleExport}
