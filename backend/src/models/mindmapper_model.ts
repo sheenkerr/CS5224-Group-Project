@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IMindmapper extends Document {
     user_id: string;
     email: string;
+    refresh_token: string;
     folder_id: string;
     folder_name: string;
     page_token: string;
@@ -21,6 +22,10 @@ const MindmapperSchema: Schema = new Schema({
         index: true // Indexing this makes querying by user_id much faster
     },
     email: {
+        type: String,
+        required: true
+    },
+    refresh_token: {
         type: String,
         required: true
     },

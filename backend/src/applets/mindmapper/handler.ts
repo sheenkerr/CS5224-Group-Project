@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getGoogleLoginUrl, handleGoogleCallback, getGoogleAccessToken, getGoogleClientId, setupDriveWatch, handleDriveWebhook } from "./controllers/googleController";
+import { getGoogleLoginUrl, handleGoogleCallback, getGoogleAccessToken, getGoogleClientId, setupDriveWatch, handleDriveWebhook, processWebhookRefreshes } from "./controllers/googleController";
 import { createLogger } from "../../utils/logger";
 
 const router = Router();
@@ -85,6 +85,28 @@ router.post("/google/drive-webhook", (req, res) => {
     res.sendStatus(200);
     handleDriveWebhook(req.headers as Record<string, string | string[] | undefined>)
         .catch((err) => log.error(`Error handling Drive webhook: ${err.message}`));
+});
+
+/** To refresh all the webhooks that are expiring soon */
+router.post('/api/mindmapper/google/refresh-webhooks', async (req, res) => {
+    try {
+
+        const apiKey = req.headers['x-api-key'];
+        if (apiKey !== process.env.AWS_CRON_SECRET) {
+            return res.status(401).send("Unauthorized");
+        }
+
+        const result = await processWebhookRefreshes();
+
+        console.log(result);
+
+        res.status(200).send("Refresh cycle complete");
+
+    } catch (error) {
+        // Catch any critical errors that bubble up from the service
+        console.error("[Webhook Cron] Critical error during refresh cycle:", error);
+        return res.status(500).send("Internal server error during refresh cycle.");
+    }
 });
 
 export default router;
