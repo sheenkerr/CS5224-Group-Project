@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Mindmapper from "./pages/Applets/Mindmapper/Mindmapper";
+import MindmapperWorkspaces from "./pages/Applets/Mindmapper/MindmapperWorkspaces"; // ✅ NEW
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "";
 
@@ -34,16 +35,30 @@ function App(): React.ReactElement {
           <Route path="/register/*" element={<Register />} />
           <Route path="/applets" element={<Applets />} />
           <Route path="/dashboard" element={<Dashboard />} />
+
+          
           <Route
-            path="/applets/Mindmappers/setup"
+            path="/applets/mindmappers/setup"
             element={
               <ProtectedRoute>
                 <Mindmapper isSetup={true} />
               </ProtectedRoute>
             }
           />
+
+
           <Route
-            path="/applets/Mindmappers/view"
+            path="/applets/mindmappers"
+            element={
+              <ProtectedRoute>
+                <MindmapperWorkspaces />
+              </ProtectedRoute>
+            }
+          />
+
+
+          <Route
+            path="/applets/mindmappers/:mindmapperId"
             element={
               <ProtectedRoute>
                 <Mindmapper isSetup={false} />
