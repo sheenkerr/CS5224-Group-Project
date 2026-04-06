@@ -3,10 +3,12 @@ import { extractGraph } from "./extract";
 import {
   saveMindMap,
   getMindMap,
-  getAllMindMaps,
   getMergedGraph,
   mergeSelectedGraphs,
   deleteMindMap,
+  createWorkspace,
+  getWorkspaces,
+  getMindMapsByWorkspace,
 } from "./graph";
 import { ExtractRequest, GraphEdge, GraphNode, MindMapRecord } from "./types";
 import { processNewDocument } from "./processDocuments";
@@ -18,109 +20,73 @@ const router = Router();
 
 router.use(requireAuth);
 
-/**
- * Manual extraction (synchronous)
- */
-router.post("/extract", async (req, res) => {
+// ── POST /api/mindmapper/workspace ──────────────────────────
+// Called when Google Drive applet is created
+router.post("/workspace", async (req, res) => {
   const userId = (req as any).userId;
-  const {
-    documentId,
-    documentName,
-    documentText,
-    extractionPrompt,
-    apiKey,
-  }: ExtractRequest = req.body;
+  const { mindmapperId, name } = req.body;
 
-  if (!userId || !documentId || !documentName || !documentText) {
-    return res.status(400).json({
-      success: false,
-      error: "Missing required fields.",
-    });
+  if (!mindmapperId || !name) {
+    return res.status(400).json({ success: false, error: "Missing mindmapperId or name" });
   }
 
-  console.log("EXTRACT userId:", userId);
-
   try {
-    const graph = await extractGraph(
-      documentText,
-      extractionPrompt || "key concepts",
-      apiKey
-    );
-
-    await saveMindMap(
-      userId,
-      documentId,
-      documentName,
-      graph,
-      extractionPrompt || "key concepts",
-      "completed" // ✅ FIXED
-    );
-
-    
-
-    return res.status(200).json({
-      success: true,
-      documentId,
-      graph,
-    });
+    const workspace = await createWorkspace(userId, mindmapperId, name);
+    return res.status(200).json({ success: true, workspace });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ success: false, error: message });
   }
 });
 
-
-router.post("/merge", async (req, res) => {
+// ── GET /api/mindmapper/workspaces ───────────────────────────
+// Get all mindmapper workspaces for a user
+router.get("/workspaces", async (req, res) => {
   const userId = (req as any).userId;
-  const { documentIds, mergedName }: { documentIds: string[]; mergedName?: string } = req.body;
-
-  if (!userId || !documentIds?.length) {
-    return res.status(400).json({ success: false, error: "Missing userId or documentIds" });
-  }
-
   try {
-    // Fetch only selected documents
-    const records: (MindMapRecord | null)[] = await Promise.all(
-      documentIds.map((id: string) => getMindMap(userId, id))
-    );
-
-    const validRecords = records.filter(r => r?.graph) as MindMapRecord[];
-
-    // Merge using LLM
-    const mergedGraph = await mergeSelectedGraphs(validRecords);
-    const mergedDocumentId = `merged-${uuidv4()}`;
-    const finalName = mergedName || "Merged Document";
-
-    // Save and get full record
-    const mergedRecord: MindMapRecord = await saveMindMap(
-      userId,
-      mergedDocumentId,
-      finalName,
-      mergedGraph,
-      "merged nodes",
-      "completed"
-    );
-
-    // ✅ Return the full merged record
-    return res.status(200).json({
-      success: true,
-      record: mergedRecord,
-    });
-
-  } catch (err) {
+    const workspaces = await getWorkspaces(userId);
+    return res.status(200).json({ success: true, workspaces });
+  } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ success: false, error: message });
   }
 });
 
-/**
- * Get merged graph (only completed docs are used internally)
- */
-router.get("/merged", async (req, res) => {
+// ── POST /api/mindmapper/:mindmapperId/extract ───────────────
+router.post("/:mindmapperId/extract", async (req, res) => {
   const userId = (req as any).userId;
+  const { mindmapperId } = req.params;
+  const { documentId, documentName, documentText, extractionPrompt, apiKey } = req.body;
 
   try {
-    const graph = await getMergedGraph(userId);
+    const graph = await extractGraph(documentText, extractionPrompt || "key concepts", apiKey);
+    const record = await saveMindMap(userId, mindmapperId, documentId, documentName, graph, extractionPrompt || "key concepts", "completed");
+    return res.status(200).json({ success: true, documentId, graph, record });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// ── GET /api/mindmapper/:mindmapperId/documents ──────────────
+router.get("/:mindmapperId/documents", async (req, res) => {
+  const userId = (req as any).userId;
+  const { mindmapperId } = req.params;
+  try {
+    const records = await getMindMapsByWorkspace(userId, mindmapperId);
+    return res.status(200).json({ success: true, records });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// ── GET /api/mindmapper/:mindmapperId/merged ─────────────────
+router.get("/:mindmapperId/merged", async (req, res) => {
+  const userId = (req as any).userId;
+  const { mindmapperId } = req.params;
+  try {
+    const graph = await getMergedGraph(userId, mindmapperId);
     return res.status(200).json({ success: true, graph });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -128,37 +94,20 @@ router.get("/merged", async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
+// ── POST /api/mindmapper/:mindmapperId/merge ─────────────────
+router.post("/:mindmapperId/merge", async (req, res) => {
   const userId = (req as any).userId;
-//   console.log("GET ALL userId:", userId);
+  const { mindmapperId } = req.params;
+  const { documentIds, mergedName } = req.body;
 
   try {
-    const records = await getAllMindMaps(userId);
-
-    return res.status(200).json({
-      success: true,
-      records,
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return res.status(500).json({ success: false, error: message });
-  }
-});
-
-/**
- * Get single document
- */
-router.get("/:documentId", async (req, res) => {
-    const userId = (req as any).userId;
-  const { documentId } = req.params;
-
-try {
-    const record = await getMindMap(userId, documentId);
-
-    if (!record) {
-      return res.status(404).json({ success: false, error: "Not found." });
-    }
-
+    const records = await Promise.all(
+      documentIds.map((id: string) => getMindMap(userId, mindmapperId, id))
+    );
+    const validRecords = records.filter(r => r?.graph) as MindMapRecord[];
+    const mergedGraph = await mergeSelectedGraphs(validRecords);
+    const mergedDocumentId = `merged-${uuidv4()}`;
+    const record = await saveMindMap(userId, mindmapperId, mergedDocumentId, mergedName || "Merged Document", mergedGraph, "merged", "completed");
     return res.status(200).json({ success: true, record });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -166,85 +115,36 @@ try {
   }
 });
 
-/**
- * DELETE a single MindMap by documentId (DB only)
- */
-router.delete("/:documentId", async (req, res) => {
+// ── DELETE /api/mindmapper/:mindmapperId/:documentId ─────────
+router.delete("/:mindmapperId/:documentId", async (req, res) => {
   const userId = (req as any).userId;
-  const { documentId } = req.params;
-
-  if (!userId || !documentId) {
-    return res.status(400).json({ success: false, error: "Missing userId or documentId" });
-  }
-
+  const { mindmapperId, documentId } = req.params;
   try {
-    // Optional: check if document exists first
-    const existing = await getMindMap(userId, documentId);
-    if (!existing) {
-      return res.status(404).json({ success: false, error: "Document not found" });
-    }
-
-    await deleteMindMap(userId, documentId);
-
-    return res.status(200).json({ success: true, message: "Document deleted from DB" });
+    await deleteMindMap(userId, mindmapperId, documentId);
+    return res.status(200).json({ success: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ success: false, error: message });
   }
 });
 
-// /**
-//  * Get all documents for a user
-//  */
-// router.get("/:userId", async (req, res) => {
-//   try {
-//     const records = await getAllMindMaps(req.params.userId);
-
-//     return res.status(200).json({
-//       success: true,
-//       records,
-//     });
-//   } catch (err: unknown) {
-//     const message = err instanceof Error ? err.message : "Unknown error";
-//     return res.status(500).json({ success: false, error: message });
-//   }
-// });
-
-/**
- * S3 webhook (async pipeline)
- */
+// ── POST /api/mindmapper/s3-webhook ─────────────────────────
+// objectKey format: mindmappers/{userId}/{mindmapperId}/{filename}.pdf
 router.post("/s3-webhook", async (req, res) => {
-  res.sendStatus(200); // respond immediately
-
+  res.sendStatus(200);
   try {
     const { bucketName, objectKey } = req.body;
-
-    if (!bucketName || !objectKey) {
-      console.error("Invalid webhook payload:", req.body);
-      return;
-    }
-
-    /**
-     * Expected format:
-     * uploads/{userId}/{documentId}.pdf
-     */
     const parts = objectKey.split("/");
-
-    if (parts.length < 3) {
-      console.error("Invalid S3 key format:", objectKey);
+    if (parts.length < 4) {
+      console.error("Invalid S3 key format (expected mindmappers/userId/mindmapperId/file.pdf):", objectKey);
       return;
     }
-
     const userId = parts[1];
-    const fileName = parts[2];
+    const mindmapperId = parts[2];
+    const fileName = parts[3];
     const documentId = fileName.replace(".pdf", "");
 
-    processNewDocument(
-      bucketName,
-      objectKey,
-      userId,
-      documentId
-    ).catch(console.error);
+    processNewDocument(bucketName, objectKey, userId, mindmapperId, documentId).catch(console.error);
   } catch (err) {
     console.error("Webhook error:", err);
   }
