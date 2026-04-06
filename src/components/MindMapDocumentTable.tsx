@@ -7,11 +7,12 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4001";
 
 interface Props {
   tab: "extract" | "documents";
+  mindmapperId: string;
   onViewSingle: (record: MindMapRecord) => void;
   onViewMerged: (records: MindMapRecord[]) => Promise<MindMapRecord | null>;
 }
 
-export default function MindMapDocumentTable({ tab, onViewSingle, onViewMerged }: Props) {
+export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, onViewMerged }: Props) {
   const { apiFetch } = useApi();
   const [records, setRecords] = useState<MindMapRecord[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -23,7 +24,7 @@ export default function MindMapDocumentTable({ tab, onViewSingle, onViewMerged }
     if (isInitial) setLoading(true); // ONLY for first load
 
     try {
-        const res = await apiFetch("/api/mindmapper");
+        const res = await apiFetch(`/api/mindmapper?mindmapperId=${mindmapperId}`);
         const data = await res.json();
 
         if (data.success) {
@@ -213,7 +214,7 @@ export default function MindMapDocumentTable({ tab, onViewSingle, onViewMerged }
                         if (!confirmed) return;
 
                         try {
-                        const res = await apiFetch(`/api/mindmapper/${record.documentId}`, {
+                        const res = await apiFetch(`/api/mindmapper/${mindmapperId}/${record.documentId}`, {
                             method: "DELETE",
                         });
                         const data = await res.json();

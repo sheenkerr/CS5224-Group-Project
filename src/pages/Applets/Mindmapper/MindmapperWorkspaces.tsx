@@ -16,7 +16,6 @@ interface Workspace {
 function MindmapperWorkspaces(): React.ReactElement {
   const navigate = useNavigate();
   const { apiFetch } = useApi();
-
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +37,6 @@ function MindmapperWorkspaces(): React.ReactElement {
     }
   }
 
-  /** Redirect to setup flow to create a new workspace */
   function handleNewWorkspace() {
     navigate("/applets/mindmappers/setup");
   }
@@ -66,9 +64,7 @@ function MindmapperWorkspaces(): React.ReactElement {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-transparent dark:bg-linear-to-br dark:from-[#0f0f1a] dark:to-[#16213e]">
       <Navigation />
-
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -79,11 +75,9 @@ function MindmapperWorkspaces(): React.ReactElement {
               Mindmapper Workspaces
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Manage your document knowledge graphs. All workspaces are linked
-              via your Google Drive account.
+              Manage your document knowledge graphs. All workspaces are linked via your Google Drive account.
             </p>
           </div>
-
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -94,14 +88,12 @@ function MindmapperWorkspaces(): React.ReactElement {
           </Button>
         </motion.div>
 
-        {/* Content */}
         {loading ? (
           <div className="text-center text-gray-500">Loading...</div>
         ) : workspaces.length === 0 ? (
           <div className="bg-white dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 p-10 text-center">
             <p className="text-gray-600 dark:text-gray-400 mb-4">
-              No workspaces yet. Create a workspace by linking a Google Drive
-              folder.
+              No workspaces yet. Create a workspace by linking a Google Drive folder.
             </p>
             <Button
               variant="contained"

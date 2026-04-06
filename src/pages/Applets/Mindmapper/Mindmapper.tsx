@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import Navigation from "../../../components/Navigation";
 import MindmapperSetup from "./MindmapperSetup";
 import MindMapViewer from "../../../components/MindMapViewer";
@@ -11,6 +12,7 @@ type MindmapperProps = {
 };
 
 function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
+  const { mindmapperId } = useParams<{ mindmapperId: string }>();
   const { apiFetch } = useApi();
 
   const [stage, setStage] = useState(0);
@@ -43,7 +45,7 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
     setError(null);
     setGraph(null);
     try {
-      const res = await apiFetch("/api/mindmapper/extract", {
+      const res = await apiFetch(`/api/mindmapper/${mindmapperId}/extract`, {
         method: "POST",
         body: JSON.stringify({
           documentId: `doc-${Date.now()}`,
@@ -66,7 +68,7 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
     if (!records.length) return null;
     const documentIds = records.map((r) => r.documentId);
     const mergedName = records.map((r) => r.documentName).join(" + ") + " merged";
-    const res = await apiFetch("/api/mindmapper/merge", {
+    const res = await apiFetch(`/api/mindmapper/${mindmapperId}/merge`, {
       method: "POST",
       body: JSON.stringify({ documentIds, mergedName }),
     });
@@ -114,9 +116,10 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
           </button>
         </div>
 
-        {tab === "documents" ? (
+        {mindmapperId && tab === "documents" ? (
           <MindMapDocumentTable
             tab={tab}
+            mindmapperId={mindmapperId}
             onViewSingle={(record) => {
               setMergedGraph(null);
               setGraph(record.graph!);
