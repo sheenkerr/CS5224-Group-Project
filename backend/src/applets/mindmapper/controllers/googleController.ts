@@ -1,3 +1,4 @@
+import axios from "axios";
 import { google } from "googleapis";
 import oauth2Client from "../../../middlewares/googleAuthMiddleware";
 import { createLogger } from "../../../utils/logger";
@@ -137,6 +138,15 @@ export async function setupDriveWatch(folderId: string, folderName: string, user
 
     // Save the updated document back to MongoDB
     await mindmapper_object.save();
+
+    // Send request to set up a workspace for this mindmap
+    await axios.post(
+        "http://localhost:4001/api/mindmapper/workspace",
+        JSON.stringify({
+            "userId": userId,
+            "mindmapperId": mindmapper_object._id.toString(),
+        })
+    );
 
     log.info(`Drive watch registered, channel: ${mindmapper_object_id.toString()}, expires: ${new Date(Number(expiration)).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })}`);
 }
