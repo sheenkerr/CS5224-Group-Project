@@ -1,34 +1,44 @@
-// ─────────────────────────────────────────────
-// setup-dynamo.ts
-// Creates the DynamoDB table for mindmapper.
-// Run ONCE before first use.
-//
-// Usage:
-//   cd backend
-//   npx ts-node src/applets/mindmapper/setup-dynamo.ts
-// ─────────────────────────────────────────────
-
 import dotenv from "dotenv";
 dotenv.config();
-import { DynamoDBClient, CreateTableCommand, DescribeTableCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  CreateTableCommand,
+  DescribeTableCommand,
+  DeleteTableCommand,
+  waitUntilTableNotExists,
+  waitUntilTableExists,
+} from "@aws-sdk/client-dynamodb";
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION ?? "ap-southeast-1" });
 
-async function createTable(params: any) {
+async function recreateTable(params: any) {
   const tableName = params.TableName;
+
+  // Delete if exists
   try {
     await client.send(new DescribeTableCommand({ TableName: tableName }));
-    console.log(`✅ Table "${tableName}" already exists.`);
-  } catch {
-    console.log(`Creating table "${tableName}"...`);
-    await client.send(new CreateTableCommand(params));
-    console.log(`✅ Table "${tableName}" created!`);
+    console.log(`🗑️  Deleting existing table "${tableName}"...`);
+    await client.send(new DeleteTableCommand({ TableName: tableName }));
+    await waitUntilTableNotExists({ client, maxWaitTime: 60 }, { TableName: tableName });
+    console.log(`✅ Table "${tableName}" deleted.`);
+  } catch (err: any) {
+    if (err.name === "ResourceNotFoundException") {
+      console.log(`ℹ️  Table "${tableName}" does not exist, skipping delete.`);
+    } else {
+      throw err;
+    }
   }
+
+  // Recreate
+  console.log(`🔨 Creating table "${tableName}"...`);
+  await client.send(new CreateTableCommand(params));
+  await waitUntilTableExists({ client, maxWaitTime: 60 }, { TableName: tableName });
+  console.log(`✅ Table "${tableName}" created with correct schema!\n`);
 }
 
 async function main() {
   // Table 1: workspaces
-  await createTable({
+  await recreateTable({
     TableName: "mindmapper-workspaces",
     AttributeDefinitions: [
       { AttributeName: "userId", AttributeType: "S" },
@@ -41,12 +51,12 @@ async function main() {
     BillingMode: "PAY_PER_REQUEST",
   });
 
-  // Table 2: graphs (composite SK)
-  await createTable({
+  // Table 2: graphs (composite SK: mindmapperId#documentId)
+  await recreateTable({
     TableName: "mindmapper-graphs",
     AttributeDefinitions: [
       { AttributeName: "userId", AttributeType: "S" },
-      { AttributeName: "mindmapperDocId", AttributeType: "S" }, // mindmapperId#documentId
+      { AttributeName: "mindmapperDocId", AttributeType: "S" },
     ],
     KeySchema: [
       { AttributeName: "userId", KeyType: "HASH" },

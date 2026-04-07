@@ -15,13 +15,10 @@ import { processNewDocument } from "./processDocuments";
 import { v4 as uuidv4 } from "uuid";
 import { requireAuth } from "../../middlewares/auth";
 
-
 const router = Router();
-
 router.use(requireAuth);
 
 // ── POST /api/mindmapper/workspace ──────────────────────────
-// Called when Google Drive applet is created
 router.post("/workspace", async (req, res) => {
   const userId = (req as any).userId;
   const { mindmapperId, name } = req.body;
@@ -40,7 +37,6 @@ router.post("/workspace", async (req, res) => {
 });
 
 // ── GET /api/mindmapper/workspaces ───────────────────────────
-// Get all mindmapper workspaces for a user
 router.get("/workspaces", async (req, res) => {
   const userId = (req as any).userId;
   try {
@@ -60,7 +56,10 @@ router.post("/:mindmapperId/extract", async (req, res) => {
 
   try {
     const graph = await extractGraph(documentText, extractionPrompt || "key concepts", apiKey);
-    const record = await saveMindMap(userId, mindmapperId, documentId, documentName, graph, extractionPrompt || "key concepts", "completed");
+    const record = await saveMindMap(
+      userId, mindmapperId, documentId, documentName,
+      graph, extractionPrompt || "key concepts", "completed"
+    );
     return res.status(200).json({ success: true, documentId, graph, record });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -101,13 +100,29 @@ router.post("/:mindmapperId/merge", async (req, res) => {
   const { documentIds, mergedName } = req.body;
 
   try {
+    // getMindMap expects raw documentId — it builds the composite key internally
     const records = await Promise.all(
-      documentIds.map((id: string) => getMindMap(userId, mindmapperId, id))
+      documentIds.map((docId: string) => getMindMap(userId, mindmapperId, docId))
     );
-    const validRecords = records.filter(r => r?.graph) as MindMapRecord[];
+
+    const validRecords = records.filter((r): r is MindMapRecord => !!r?.graph);
+    if (validRecords.length === 0) {
+      return res.status(400).json({ success: false, error: "No valid documents to merge" });
+    }
+
     const mergedGraph = await mergeSelectedGraphs(validRecords);
     const mergedDocumentId = `merged-${uuidv4()}`;
-    const record = await saveMindMap(userId, mindmapperId, mergedDocumentId, mergedName || "Merged Document", mergedGraph, "merged", "completed");
+
+    const record = await saveMindMap(
+      userId,
+      mindmapperId,
+      mergedDocumentId,
+      mergedName || "Merged Document",
+      mergedGraph,
+      "merged",
+      "completed"
+    );
+
     return res.status(200).json({ success: true, record });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -115,15 +130,21 @@ router.post("/:mindmapperId/merge", async (req, res) => {
   }
 });
 
-// ── DELETE /api/mindmapper/:mindmapperId/:documentId ─────────
-router.delete("/:mindmapperId/:documentId", async (req, res) => {
+// ── DELETE /api/mindmapper/:mindmapperId/documents/:documentId
+// NOTE: route uses /documents/:documentId to avoid clashing with /:mindmapperId/merged etc.
+router.delete("/:mindmapperId/documents/:documentId", async (req, res) => {
   const userId = (req as any).userId;
   const { mindmapperId, documentId } = req.params;
+  
+  console.log("DELETE request:", { userId, mindmapperId, documentId });
+  console.log("Composite key will be:", `${mindmapperId}#${documentId}`);
+  
   try {
     await deleteMindMap(userId, mindmapperId, documentId);
     return res.status(200).json({ success: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("Delete failed:", message);
     return res.status(500).json({ success: false, error: message });
   }
 });

@@ -2,9 +2,6 @@ import { useState, useEffect } from "react";
 import { MindMapRecord } from "../../backend/src/applets/mindmapper/types";
 import { useApi } from "../utils/api";
 
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:4001";
-
 interface Props {
   tab: "extract" | "documents";
   mindmapperId: string;
@@ -21,35 +18,30 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
 
   const fetchRecords = async (isInitial = false) => {
-    if (isInitial) setLoading(true); // ONLY for first load
-
+    if (isInitial) setLoading(true);
     try {
-        const res = await apiFetch(`/api/mindmapper?mindmapperId=${mindmapperId}`);
-        const data = await res.json();
-
-        if (data.success) {
+      const res = await apiFetch(`/api/mindmapper/${mindmapperId}/documents`);
+      const data = await res.json();
+      if (data.success) {
         setRecords(prev => {
-            // prevent unnecessary re-renders if data hasn't changed
-            const same = JSON.stringify(prev) === JSON.stringify(data.records);
-            return same ? prev : data.records;
+          const same = JSON.stringify(prev) === JSON.stringify(data.records);
+          return same ? prev : data.records;
         });
-        }
+      }
     } catch (err) {
-        console.error("Failed to fetch records:", err);
+      console.error("Failed to fetch records:", err);
     } finally {
-        if (isInitial) setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
-  // Poll for new documents every 10 seconds
-    useEffect(() => {
+  useEffect(() => {
     if (tab === "documents") {
-        fetchRecords(true); // initial load
-
-        const interval = setInterval(() => fetchRecords(false), 10000);
-        return () => clearInterval(interval);
+      fetchRecords(true);
+      const interval = setInterval(() => fetchRecords(false), 10000);
+      return () => clearInterval(interval);
     }
-    }, [tab]);
+  }, [tab]);
 
   const toggleSelect = (documentId: string) => {
     setSelected(prev => {
@@ -60,79 +52,64 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
   };
 
   const selectedRecords = records.filter(r => selected.has(r.documentId));
-
-  if (loading) return <div style={{ padding: 20, color: "#94a3b8" }}>Loading documents...</div>;
-
   const filteredRecords = records.filter(r =>
-  r.documentName.toLowerCase().includes(searchQuery.toLowerCase())
-);
+    r.documentName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center animate-pulse">
+        Loading documents...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 16 }}>
+    <div className="flex flex-col gap-3">
       {/* Header */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#f8fafc" }}>
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
             📄 Your Documents ({filteredRecords.length})
           </h3>
 
           {selected.size >= 2 && (
-  <button
-    onClick={async () => {
-      // Call onViewMerged with selected records, expect a single merged record back
-      const mergedRecord = await onViewMerged(selectedRecords);
-
-      // Clear old selections
-      setSelected(new Set());
-
-      // Highlight new merged doc
-      if (mergedRecord?.documentId) {
-        setActiveDocumentId(mergedRecord.documentId);
-      }
-
-      // Refresh document list
-      await fetchRecords();
-    }}
-    style={{
-      padding: "6px 12px",
-      background: "#7c3aed",
-      color: "#fff",
-      border: "none",
-      borderRadius: 6,
-      fontSize: 12,
-      fontWeight: 600,
-      cursor: "pointer",
-    }}
-  >
-    🔗 Merge {selected.size} docs
-  </button>
-)}
+            <button
+              onClick={async () => {
+                const mergedRecord = await onViewMerged(selectedRecords);
+                setSelected(new Set());
+                if (mergedRecord?.documentId) {
+                  setActiveDocumentId(mergedRecord.documentId);
+                }
+                await fetchRecords();
+              }}
+              className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+            >
+              🔗 Merge {selected.size} docs
+            </button>
+          )}
         </div>
 
+        {/* Search */}
         <input
           type="text"
           placeholder="Search documents..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "8px 10px",
-            borderRadius: 6,
-            border: "1px solid #334155",
-            background: "#020617",
-            color: "#f8fafc",
-            fontSize: 12,
-          }}
+          className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
         />
       </div>
 
       {/* Body */}
       {records.length === 0 ? (
-        <p style={{ color: "#64748b", fontSize: 12 }}>
-          No documents yet. Upload a file to Google Drive to get started!
-        </p>
+        <div className="text-center py-6">
+          <span className="text-3xl block mb-2">📂</span>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            No documents yet. Upload a file to Google Drive to get started!
+          </p>
+        </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="flex flex-col gap-2">
           {filteredRecords.map(record => {
             const isActive =
               selected.has(record.documentId) ||
@@ -141,16 +118,11 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
             return (
               <div
                 key={record.documentId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 12px",
-                  background: isActive ? "#1e3a5f" : "#0f172a",
-                  borderRadius: 8,
-                  border: `1px solid ${isActive ? "#3b82f6" : "#1e293b"}`,
-                  cursor: "pointer",
-                }}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors cursor-pointer
+                  ${isActive
+                    ? "bg-blue-50 dark:bg-blue-950/40 border-blue-400 dark:border-blue-600"
+                    : "bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700"
+                  }`}
               >
                 {/* Checkbox */}
                 <input
@@ -158,94 +130,75 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
                   checked={selected.has(record.documentId)}
                   onChange={() => toggleSelect(record.documentId)}
                   onClick={(e) => e.stopPropagation()}
+                  className="rounded accent-blue-600 cursor-pointer flex-shrink-0"
                 />
 
                 {/* Info */}
                 <div
-                  style={{ flex: 1 }}
+                  className="flex-1 min-w-0"
                   onClick={() => {
                     setActiveDocumentId(record.documentId);
                     onViewSingle(record);
                   }}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#f8fafc" }}>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
                     {record.documentName}
                   </div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {record.graph ? (
                       <>
                         {record.graph.nodes.length} nodes · {record.graph.edges.length} edges ·{" "}
                         {new Date(record.createdAt).toLocaleDateString()}
                       </>
                     ) : (
-                      <span>Processing…</span>
+                      <span className="text-amber-500 dark:text-amber-400">⏳ Processing…</span>
                     )}
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div style={{ display: "flex", gap: 4 }}>
+                <div className="flex gap-1.5 flex-shrink-0">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setActiveDocumentId(record.documentId);
                       onViewSingle(record);
                     }}
-                    style={{
-                      padding: "4px 10px",
-                      background: "#1d4ed8",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 5,
-                      fontSize: 11,
-                      cursor: "pointer",
-                    }}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors cursor-pointer"
                   >
                     View
                   </button>
 
                   <button
                     onClick={async (e) => {
-                        e.stopPropagation();
-
-                        const confirmed = window.confirm(
+                      e.stopPropagation();
+                      const confirmed = window.confirm(
                         `Are you sure you want to delete "${record.documentName}"? This cannot be undone.`
+                      );
+                      if (!confirmed) return;
+                      try {
+                        // ✅ matches DELETE /:mindmapperId/documents/:documentId
+                        const res = await apiFetch(
+                          `/api/mindmapper/${mindmapperId}/documents/${record.documentId}`,
+                          { method: "DELETE" }
                         );
-                        if (!confirmed) return;
-
-                        try {
-                        const res = await apiFetch(`/api/mindmapper/${mindmapperId}/${record.documentId}`, {
-                            method: "DELETE",
-                        });
                         const data = await res.json();
-
                         if (data.success) {
-                            alert(`Deleted "${record.documentName}" successfully.`);
-                            fetchRecords();
+                          fetchRecords();
                         } else {
-                            alert(`Failed to delete: ${data.error}`);
+                          alert(`Failed to delete: ${data.error}`);
                         }
-                        } catch (err) {
+                      } catch (err) {
                         console.error(err);
                         alert("Something went wrong while deleting.");
-                        }
+                      }
                     }}
-                    style={{
-                        padding: "4px 8px",
-                        background: "#dc2626",
-                        border: "none",
-                        borderRadius: 5,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                    }}
-                    >
-                    <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="16" height="16" viewBox="0 0 16 16"
-                    style={{ fill: "#FFFFFF" }}>
-                    <path d="M 6.496094 1 C 5.675781 1 5 1.675781 5 2.496094 L 5 3 L 2 3 L 2 4 L 3 4 L 3 12.5 C 3 13.328125 3.671875 14 4.5 14 L 10.5 14 C 11.328125 14 12 13.328125 12 12.5 L 12 4 L 13 4 L 13 3 L 10 3 L 10 2.496094 C 10 1.675781 9.324219 1 8.503906 1 Z M 6.496094 2 L 8.503906 2 C 8.785156 2 9 2.214844 9 2.496094 L 9 3 L 6 3 L 6 2.496094 C 6 2.214844 6.214844 2 6.496094 2 Z M 5 5 L 6 5 L 6 12 L 5 12 Z M 7 5 L 8 5 L 8 12 L 7 12 Z M 9 5 L 10 5 L 10 12 L 9 12 Z"></path>
+                    className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors cursor-pointer flex items-center justify-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 16 16" fill="white">
+                      <path d="M 6.496094 1 C 5.675781 1 5 1.675781 5 2.496094 L 5 3 L 2 3 L 2 4 L 3 4 L 3 12.5 C 3 13.328125 3.671875 14 4.5 14 L 10.5 14 C 11.328125 14 12 13.328125 12 12.5 L 12 4 L 13 4 L 13 3 L 10 3 L 10 2.496094 C 10 1.675781 9.324219 1 8.503906 1 Z M 6.496094 2 L 8.503906 2 C 8.785156 2 9 2.214844 9 2.496094 L 9 3 L 6 3 L 6 2.496094 C 6 2.214844 6.214844 2 6.496094 2 Z M 5 5 L 6 5 L 6 12 L 5 12 Z M 7 5 L 8 5 L 8 12 L 7 12 Z M 9 5 L 10 5 L 10 12 L 9 12 Z" />
                     </svg>
-                </button>
+                  </button>
                 </div>
               </div>
             );

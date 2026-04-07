@@ -7,6 +7,7 @@ import {
   GetCommand,
   QueryCommand,
   DeleteCommand,
+  ScanCommand
 } from "@aws-sdk/lib-dynamodb";
 import Groq from "groq-sdk";
 import { MindMap, MindMapRecord, MindMapWorkspace, GraphNode, GraphEdge } from "./types";
@@ -51,6 +52,7 @@ export async function getWorkspaces(userId: string): Promise<MindMapWorkspace[]>
 }
 
 // ── MindMap CRUD ────────────────────────────────────────────
+// backend/src/applets/mindmapper/crud.ts
 export async function saveMindMap(
   userId: string,
   mindmapperId: string,
@@ -64,7 +66,7 @@ export async function saveMindMap(
   const record: MindMapRecord = {
     userId,
     mindmapperId,
-    mindmapperDocId: makeDocId(mindmapperId, documentId),
+    mindmapperDocId: `${mindmapperId}#${documentId}`, // ✅ always include #
     documentId,
     documentName,
     graph,
@@ -73,7 +75,11 @@ export async function saveMindMap(
     createdAt: Date.now(),
     ...(s3Key && { s3Key }),
   };
-  await dynamo.send(new PutCommand({ TableName: GRAPHS_TABLE, Item: record }));
+
+  await dynamo.send(
+    new PutCommand({ TableName: "mindmapper-graphs", Item: record })
+  );
+
   return record;
 }
 
@@ -113,12 +119,17 @@ export async function deleteMindMap(
   mindmapperId: string,
   documentId: string
 ): Promise<void> {
+  // ✅ Construct the correct composite SK
+  const mindmapperDocId = makeDocId(mindmapperId, documentId);
+
   await dynamo.send(
     new DeleteCommand({
       TableName: GRAPHS_TABLE,
-      Key: { userId, mindmapperDocId: makeDocId(mindmapperId, documentId) },
+      Key: { userId, mindmapperDocId },
     })
   );
+
+  console.log(`Deleted document ${documentId} from workspace ${mindmapperId}`);
 }
 
 export async function getMergedGraph(
