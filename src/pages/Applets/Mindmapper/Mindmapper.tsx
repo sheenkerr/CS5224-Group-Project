@@ -87,7 +87,7 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
       {/* ── Left Panel ── */}
       <div className="w-80 flex-shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">🧠 Mind Mapper</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">🧠 Mind Mapper ({mindmapperId})</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Paste any document text and we'll extract a knowledge graph for you.
           </p>

@@ -1,7 +1,6 @@
 export interface MindMapWorkspace {
   userId: string;
   mindmapperId: string;   // matches the applet ID from MongoDB
-  name: string;           // folder_name from MongoDB
   createdAt: number;
 }
 

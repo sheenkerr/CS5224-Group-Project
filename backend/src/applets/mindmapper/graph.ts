@@ -28,12 +28,10 @@ function makeDocId(mindmapperId: string, documentId: string) {
 export async function createWorkspace(
   userId: string,
   mindmapperId: string,
-  name: string
 ): Promise<MindMapWorkspace> {
   const workspace: MindMapWorkspace = {
     userId,
     mindmapperId,
-    name,
     createdAt: Date.now(),
   };
   await dynamo.send(new PutCommand({ TableName: WORKSPACES_TABLE, Item: workspace }));

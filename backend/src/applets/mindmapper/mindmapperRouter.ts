@@ -21,14 +21,14 @@ router.use(requireAuth);
 // ── POST /api/mindmapper/workspace ──────────────────────────
 router.post("/workspace", async (req, res) => {
   const userId = (req as any).userId;
-  const { mindmapperId, name } = req.body;
+  const { mindmapperId } = req.body;
 
-  if (!mindmapperId || !name) {
+  if (!mindmapperId) {
     return res.status(400).json({ success: false, error: "Missing mindmapperId or name" });
   }
 
   try {
-    const workspace = await createWorkspace(userId, mindmapperId, name);
+    const workspace = await createWorkspace(userId, mindmapperId);
     return res.status(200).json({ success: true, workspace });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -9,7 +9,6 @@ import CloudIcon from "@mui/icons-material/Cloud";
 
 interface Workspace {
   mindmapperId: string;
-  name: string;
   createdAt?: string;
 }
 
@@ -52,7 +51,7 @@ function MindmapperWorkspaces(): React.ReactElement {
         onClick={() => navigate(`/applets/mindmappers/${ws.mindmapperId}`)}
       >
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-          {ws.name}
+          {ws.mindmapperId}
         </h3>
         <p className="text-sm text-gray-500">
           Workspace ID: {ws.mindmapperId}
