@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { MindMapRecord } from "../../backend/src/applets/mindmapper/types";
 import { useApi } from "../utils/api";
+import ConfirmModal from "./ConfirmModal";
 
 interface Props {
   tab: "extract" | "documents";
@@ -16,7 +17,8 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
-
+  const [deleteTarget, setDeleteTarget] = useState<MindMapRecord | null>(null);
+  
   const fetchRecords = async (isInitial = false) => {
     if (isInitial) setLoading(true);
     try {
@@ -161,8 +163,7 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveDocumentId(record.documentId);
-                      onViewSingle(record);
+                      setDeleteTarget(record);
                     }}
                     className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors cursor-pointer"
                   >
@@ -170,28 +171,9 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
                   </button>
 
                   <button
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.stopPropagation();
-                      const confirmed = window.confirm(
-                        `Are you sure you want to delete "${record.documentName}"? This cannot be undone.`
-                      );
-                      if (!confirmed) return;
-                      try {
-                        // ✅ matches DELETE /:mindmapperId/documents/:documentId
-                        const res = await apiFetch(
-                          `/api/mindmapper/${mindmapperId}/documents/${record.documentId}`,
-                          { method: "DELETE" }
-                        );
-                        const data = await res.json();
-                        if (data.success) {
-                          fetchRecords();
-                        } else {
-                          alert(`Failed to delete: ${data.error}`);
-                        }
-                      } catch (err) {
-                        console.error(err);
-                        alert("Something went wrong while deleting.");
-                      }
+                      setDeleteTarget(record);
                     }}
                     className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors cursor-pointer flex items-center justify-center"
                   >
@@ -205,6 +187,38 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
           })}
         </div>
       )}
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Document"
+        message={
+          deleteTarget
+            ? `Are you sure you want to delete "${deleteTarget.documentName}"? This cannot be undone.`
+            : ""
+        }
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+
+          try {
+            const res = await apiFetch(
+              `/api/mindmapper/${mindmapperId}/documents/${deleteTarget.documentId}`,
+              { method: "DELETE" }
+            );
+
+            const data = await res.json();
+
+            if (data.success) {
+              fetchRecords();
+            } else {
+              alert(data.error);
+            }
+          } catch (err) {
+            console.error(err);
+          }
+
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }
