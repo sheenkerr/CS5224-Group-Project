@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { getGoogleLoginUrl, handleGoogleCallback, getGoogleAccessToken, getGoogleClientId, setupDriveWatch, handleDriveWebhook } from "./controllers/googleController";
 import { createLogger } from "../../utils/logger";
+import { google } from "googleapis";
+import oauth2Client from "../../middlewares/googleAuthMiddleware";
+
 
 const router = Router();
 const log = createLogger("Mindmapper");
@@ -22,7 +25,7 @@ router.get("/google/callback", async (req, res) => {
     const result = await handleGoogleCallback(req);
 
     const frontendUrl = process.env.FRONTEND_URL;
-    const redirectTarget = `${frontendUrl}/applets/Mindmappers/setup?success=${result}`;
+    const redirectTarget = `${frontendUrl}/applets/mindmappers/setup?success=${result}`; //changed this
 
     res.redirect(redirectTarget);
 });
@@ -51,8 +54,8 @@ router.get("/google/access-token", (req, res) => {
 
 /** Register a Google Drive watch channel for the selected folder */
 router.post("/google/setup-listener", async (req, res) => {
-    const { folderId, folderName } = req.body;
-
+    const { folderId, folderName} = req.body;
+    
     if (!folderId || !folderName) {
         res.status(400).json({
             success: false,
@@ -60,9 +63,17 @@ router.post("/google/setup-listener", async (req, res) => {
         });
         return;
     }
+    const email = (global as any).googleUserEmail;
+
+    if (!email) {
+        return res.status(401).json({
+            success: false,
+            error: "Google email not found. Please sign in again."
+        });
+    }
 
     try {
-        await setupDriveWatch(folderId, folderName);
+        await setupDriveWatch(folderId, folderName, email);
         res.status(200).json({
             message: "Drive watch registered",
             success: true

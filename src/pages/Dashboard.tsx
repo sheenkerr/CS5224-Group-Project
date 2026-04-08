@@ -44,11 +44,38 @@ const categoryIcons: Record<string, React.ReactNode> = {
 function Dashboard(): React.ReactElement | null {
     const navigate = useNavigate();
     const { user, isLoaded: userLoaded } = useUser();
-    const { userId, isLoaded: authLoaded } = useAuth();
+    const { userId, isLoaded: authLoaded, getToken } = useAuth();
 
     const [favoriteApplets, setFavoriteApplets] = useState<string[]>(["1", "4", "8"]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
+    const [activities, setActivities] = useState<any[]>([]);
+    const [notifications, setNotifications] = useState<any[]>([]);
+
+    React.useEffect(() => {
+        async function fetchUserData() {
+            if (!userId) return;
+            try {
+                const token = await getToken();
+                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+                
+                const [actRes, notRes] = await Promise.all([
+                    fetch(`${baseUrl}/api/user/activities`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }),
+                    fetch(`${baseUrl}/api/user/notifications`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    })
+                ]);
+
+                if (actRes.ok) setActivities(await actRes.json());
+                if (notRes.ok) setNotifications(await notRes.json());
+            } catch (err) {
+                console.error("Failed to fetch user data:", err);
+            }
+        }
+        fetchUserData();
+    }, [userId, getToken]);
 
     const filteredApplets = useMemo(function () {
         return initialApplets.filter(function (applet) {
@@ -192,7 +219,7 @@ function Dashboard(): React.ReactElement | null {
             >
                 <div className="p-4" onClick={() => {
                     if (applet.name === "Mindmappers") {
-                        navigate(`/applets/${applet.name}/setup`);
+                        navigate(`/applets/mindmappers`);
                     } else {
                         navigate(`/applets/${applet.name}`);
                     }
@@ -308,13 +335,18 @@ function Dashboard(): React.ReactElement | null {
         return "";
     }
 
-    if (authLoaded && !userId) {
-        navigate("/login");
-        return null;
-    }
+    React.useEffect(() => {
+        if (authLoaded && !userId) {
+            navigate("/login");
+        }
+    }, [authLoaded, userId, navigate]);
 
     if (!authLoaded || !userLoaded) {
         return renderLoadingState();
+    }
+
+    if (authLoaded && !userId) {
+        return null; // Return nothing while redirecting
     }
 
     return (
@@ -437,6 +469,62 @@ function Dashboard(): React.ReactElement | null {
                     </motion.div>
 
                     {filteredApplets.length === 0 && renderEmptyState()}
+                </motion.section>
+
+                <motion.section
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.55 }}
+                    className="mb-12 grid grid-cols-1 lg:grid-cols-2 gap-8"
+                >
+                    <div className="bg-white dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 p-6 shadow-sm dark:shadow-none transition-colors">
+                        <div className="flex items-center gap-2 mb-6 border-b border-gray-100 dark:border-white/10 pb-4">
+                            <NotificationsIcon sx={{ color: "#ff6b35" }} />
+                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white transition-colors">Notifications</h3>
+                        </div>
+                        {notifications.length > 0 ? (
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                {notifications.map((notif: any) => (
+                                    <div key={notif._id} className="group p-4 rounded-lg bg-gray-50 dark:bg-white/5 border border-transparent hover:border-[#ff6b35]/20 transition-all cursor-pointer">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-[#ff6b35] transition-colors">{notif.title}</h4>
+                                            {!notif.is_read && <span className="w-2 h-2 rounded-full bg-[#ff6b35]"></span>}
+                                        </div>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{notif.message}</p>
+                                        <span className="text-xs text-gray-500">{new Date(notif.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-gray-500">No new notifications</div>
+                        )}
+                    </div>
+
+                    <div className="bg-white dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 p-6 shadow-sm dark:shadow-none transition-colors">
+                        <div className="flex items-center gap-2 mb-6 border-b border-gray-100 dark:border-white/10 pb-4">
+                            <CodeIcon sx={{ color: "#ff6b35" }} />
+                            <h3 className="text-xl font-semibold text-gray-900 dark:text-white transition-colors">Recent Activity</h3>
+                        </div>
+                        {activities.length > 0 ? (
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                {activities.map((act: any) => (
+                                    <div key={act._id} className="flex gap-4 items-start p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                        <div className="w-8 h-8 rounded-full bg-[#ff6b35]/10 flex items-center justify-center shrink-0 mt-1">
+                                            <StarBorderIcon sx={{ fontSize: 16, color: "#ff6b35" }} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-gray-900 dark:text-white mb-1">
+                                                <span className="font-medium text-[#ff6b35]">{act.action_type?.replace(/_/g, " ") || 'Unknown'}</span> {act.entity_type} {act.metadata?.title || act.metadata?.new_name || act.metadata?.old_name || act.entity_id}
+                                            </p>
+                                            <span className="text-xs text-gray-500">{new Date(act.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-gray-500">No recent activity</div>
+                        )}
+                    </div>
                 </motion.section>
 
                 <motion.section

@@ -1,3 +1,9 @@
+export interface MindMapWorkspace {
+  userId: string;
+  mindmapperId: string;   // matches the applet ID from MongoDB
+  createdAt: number;
+}
+
 export interface GraphNode {
   id: string;
   label: string;
@@ -18,9 +24,13 @@ export interface MindMap {
 
 export interface MindMapRecord {
   userId: string;
+  mindmapperId: string;
+  mindmapperDocId: string;
   documentId: string;
   documentName: string;
-  graph: MindMap;
+  s3Key?: string;
+  status: "processing" | "completed" | "failed"; 
+  graph?: MindMap;
   extractionPrompt: string;
   createdAt: number;
 }
@@ -30,6 +40,7 @@ export interface ExtractRequest {
   documentId: string;
   documentName: string;
   documentText: string;
+  mindmapperId: string;
   extractionPrompt?: string; // optional, defaults to "key concepts"
   apiKey?: string;           // optional user-provided API key
 }
