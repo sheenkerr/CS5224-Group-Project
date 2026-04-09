@@ -83,6 +83,14 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+    React.useEffect(() => {
+        const queryString = window.location.search;
+        const params = new URLSearchParams(queryString);
+        const success = params.get('success');
+        if (success == "true") {
+            setStage(1);
+        }
+    }, []);
   const [notionApiKey, setNotionApiKey] = useState<string | null>(null);
   const [notionLoading, setNotionLoading] = useState(false);
 

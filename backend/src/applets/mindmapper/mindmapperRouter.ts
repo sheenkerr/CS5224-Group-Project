@@ -20,6 +20,10 @@ import axios from "axios";
 const router = Router();
 router.use(requireAuth);
 
+router.get("/", async (req, res) => {
+  res.status(200).send("Hello World");
+});
+
 // ── POST /api/mindmapper/workspace ──────────────────────────
 router.post("/workspace", async (req, res) => {
   const userId = (req as any).userId;

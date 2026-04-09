@@ -1,8 +1,9 @@
 import React from "react";
 import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
-import { Dialog } from "@mui/material";
-import { useUser } from "@clerk/clerk-react";
+import { Dialog, Alert, Snackbar } from "@mui/material";
+import { useUser, useAuth } from "@clerk/clerk-react";
+import { useApi } from "../../../utils/api";
 
 /** Shape of the folder selected by the Google Picker */
 type SelectedFolder = {
@@ -16,7 +17,7 @@ type MindmapperSetupProps = {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8001").replace(/\/$/, "");
 
-/** Dynamically load a script tag if it hasn't been loaded yet */
+/** Dynamically load a script tag if it hasn't been loaded yet for the google document selecter */
 function loadScript(src: string): Promise<void> {
     return new Promise((resolve, reject) => {
         if (document.querySelector(`script[src="${src}"]`)) {
@@ -35,33 +36,77 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     const [open, setOpen] = React.useState(true);
     const [selectedFolder, setSelectedFolder] = React.useState<SelectedFolder | null>(null);
     const [pickerLoading, setPickerLoading] = React.useState(false);
-    
-    const completeSetup = async () => {
-        /** Send the folder ID and the folder name to our backend */
-    
-        const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
-            folderId: selectedFolder?.id,
-            folderName: selectedFolder?.name,
-        });
+    const [folderError, setFolderError] = React.useState(false);
+    const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+    const [snackbarMessage, setSnackbarMessage] = React.useState("");
 
-        if (response.data.success) {
-            // TODO: Redirect to the mindmapper page not the setup page but this required the database as I need the unique id for the mindmapper setup
-            setOpen(false);
-        } else {
-            // Show an error message
+    const { apiFetch } = useApi();
+
+    /** Clerk's user id */
+    const { userId, isLoaded: authLoaded, getToken } = useAuth();
+    const { isLoaded, isSignedIn, user } = useUser();
+
+    const completeSetup = async (): Promise<boolean> => {
+        if (!selectedFolder) {
+            setFolderError(true);
+            return false;
+        }
+        setFolderError(false);
+
+        try {
+            const response = await apiFetch(`/api/mindmapper/google/setup-listener`, {
+                method: "POST",
+                body: JSON.stringify({
+                    userId: userId,
+                    email: user!.primaryEmailAddress!.emailAddress,
+                    folderId: selectedFolder?.id,
+                    folderName: selectedFolder?.name,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const result = await apiFetch(`/api/mindmapper/workspace`, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        userId: userId,
+                        mindmapperId: data.mindmapperId,
+                    }),
+                });
+
+                const resultData = await result.json();
+
+                if (resultData.success) {
+                    setOpen(false);
+                    window.location.href = "/applets/mindmappers";
+                    return true;
+                } else {
+                    setSnackbarMessage(resultData.error || "Setup failed. Please try again.");
+                    setSnackbarOpen(true);
+                    return false;
+                }
+            } else {
+                setSnackbarMessage(data.error || "Setup failed. Please try again.");
+                setSnackbarOpen(true);
+                return false;
+            }
+        } catch (err: any) {
+            setSnackbarMessage(err?.response?.data?.error || err?.message || "An unexpected error occurred.");
+            setSnackbarOpen(true);
+            return false;
         }
     };
 
-    // const googleLogin = async () => {
-    //     const response = await axios.get(`${API_BASE_URL}/api/mindmapper/google/login-url`);
-    //     const authUrl = response.data.authUrl;
-    //     window.location.href = authUrl;
-    // };
+    const handleSnackbarClose = (_event?: React.SyntheticEvent | Event, reason?: string) => {
+        if (reason === "clickaway") return;
+        setSnackbarOpen(false);
+    };
+
     const googleLogin = async () => {
-        const response = await axios.get(`${API_BASE_URL}/api/mindmapper/google/login-url`);
-        console.log("RESPONSE:", response.data);  
-        const authUrl = response.data.authUrl;
-        console.log("URL:", authUrl);             
+        const response = await apiFetch(`/api/mindmapper/google/login-url`);
+        const data = await response.json();
+        const authUrl = data.authUrl;
         window.location.href = authUrl;
     };
 
@@ -72,12 +117,15 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         try {
             // Fetch access token and API key from the backend
             const [tokenRes, apiKeyRes] = await Promise.all([
-                axios.get(`${API_BASE_URL}/api/mindmapper/google/access-token`),
-                axios.get(`${API_BASE_URL}/api/mindmapper/google/api-key`),
+                apiFetch(`/api/mindmapper/google/access-token`),
+                apiFetch(`/api/mindmapper/google/api-key`),
             ]);
 
-            const accessToken: string = tokenRes.data.access_token;
-            const apiKey: string = apiKeyRes.data.apiKey;
+            const tokenData = await tokenRes.json();
+            const apiKeyData = await apiKeyRes.json();
+
+            const accessToken: string = tokenData.access_token;
+            const apiKey: string = apiKeyData.apiKey;
 
             // Load the Google API client library
             await loadScript("https://apis.google.com/js/api.js");
@@ -102,6 +150,7 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
                     if (data.action === google.picker.Action.PICKED) {
                         const doc = data.docs[0];
                         setSelectedFolder({ id: doc.id, name: doc.name });
+                        setFolderError(false);
                         setOpen(true);
                     } else if (data.action === google.picker.Action.CANCEL) {
                         setOpen(true);
@@ -144,6 +193,12 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
                 </p>
             </div>
 
+            {folderError && (
+                <Alert severity="error" variant="outlined" onClose={() => setFolderError(false)}>
+                    Please select a Google Drive folder.
+                </Alert>
+            )}
+
             {selectedFolder && (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/30 text-sm text-green-800 dark:text-green-300 self-start">
                     <span className="font-medium">Folder selected: {selectedFolder.name}</span>
@@ -171,6 +226,12 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
                     onComplete={completeSetup}
                 />
             </Dialog>
+
+            <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleSnackbarClose}>
+                <Alert onClose={handleSnackbarClose} severity="error" variant="filled" sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
         </main>
     );
 }

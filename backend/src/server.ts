@@ -12,7 +12,7 @@ import { connectToDatabase } from "./utils/database";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT ?? 4001; 
+const PORT = process.env.BACKEND_PORT ?? 4001;
 const log = createLogger("Server");
 
 // -------------------

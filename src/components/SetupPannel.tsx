@@ -11,7 +11,7 @@ type SetupPanelProps = {
     stepsContent: React.ReactNode[];
     isOptional: boolean[];
     currentStep: number;
-    onComplete: () => void;
+    onComplete: () => Promise<boolean> | boolean;
 };
 
 
@@ -31,7 +31,13 @@ function SetupPannel({ steps, stepsContent, isOptional, currentStep = 0, onCompl
         return skipped.has(step);
     };
 
-    const handleNext = () => {
+    const handleNext = async () => {
+        // On the last step, call onComplete and only advance if it returns true
+        if (activeStep === steps.length - 1) {
+            const result = await onComplete();
+            if (!result) return;
+        }
+
         let newSkipped = skipped;
         if (isStepSkipped(activeStep)) {
             newSkipped = new Set(newSkipped.values());
@@ -60,16 +66,6 @@ function SetupPannel({ steps, stepsContent, isOptional, currentStep = 0, onCompl
             return newSkipped;
         });
     };
-
-    React.useEffect(() => {
-        if (activeStep === steps.length) {
-            const timer = setTimeout(() => {
-                onComplete?.();
-            }, 1500);
-
-            return () => clearTimeout(timer);
-        }
-    }, [activeStep, steps.length, onComplete]);
 
     return (
         <Box

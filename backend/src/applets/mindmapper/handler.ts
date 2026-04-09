@@ -1,9 +1,7 @@
 import { Router } from "express";
-import { getGoogleLoginUrl, handleGoogleCallback, getGoogleAccessToken, getGoogleClientId, setupDriveWatch, handleDriveWebhook } from "./controllers/googleController";
+import { getGoogleLoginUrl, handleGoogleCallback, getGoogleAccessToken, getGoogleClientId, setupDriveWatch, handleDriveWebhook, processWebhookRefreshes } from "./controllers/googleController";
 import { createLogger } from "../../utils/logger";
-import { google } from "googleapis";
-import oauth2Client from "../../middlewares/googleAuthMiddleware";
-
+import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
 const log = createLogger("Mindmapper");
@@ -13,36 +11,71 @@ router.get("/", (req, res) => {
     res.status(200).json({ message: "Mindmapper routes are imported" });
 });
 
-router.get("/google/login-url", (req, res) => {
+/** Callback for google to send us data */
+router.get("/callback", async (req, res) => {
+
+    const result = await handleGoogleCallback(req);
+
+    const frontendUrl = process.env.FRONTEND_URL;
+
+    const redirectTarget = `${frontendUrl}/applets/Mindmappers/setup?success=${result}`;
+
+    res.redirect(redirectTarget);
+});
+
+/**
+ * Webhook endpoint — Google POSTs here whenever a Drive change happens.
+ * Must respond 200 quickly; processing happens asynchronously.
+ */
+router.post("/drive-webhook", (req, res) => {
+    res.sendStatus(200);
+    handleDriveWebhook(req.headers as Record<string, string | string[] | undefined>)
+        .catch((err) => log.error(`Error handling Drive webhook: ${err.message}`));
+});
+
+/** To refresh all the webhooks that are expiring soon */
+router.post('/refresh-webhooks', async (req, res) => {
+    try {
+
+        const apiKey = req.headers['x-api-key'];
+        if (apiKey !== process.env.AWS_CRON_SECRET) {
+            return res.status(401).send("Unauthorized");
+        }
+
+        const result = await processWebhookRefreshes();
+
+        console.log(result);
+
+        res.status(200).send("Refresh cycle complete");
+
+    } catch (error) {
+        // Catch any critical errors that bubble up from the service
+        console.error("[Webhook Cron] Critical error during refresh cycle:", error);
+        return res.status(500).send("Internal server error during refresh cycle.");
+    }
+});
+
+router.use(requireAuth);
+
+router.get("/login-url", (req, res) => {
     const authUrl = getGoogleLoginUrl();
 
     res.status(200).json({ authUrl });
 });
 
-/** Callback for google to send us data */
-router.get("/google/callback", async (req, res) => {
-
-    const result = await handleGoogleCallback(req);
-
-    const frontendUrl = process.env.FRONTEND_URL;
-    const redirectTarget = `${frontendUrl}/applets/mindmappers/setup?success=${result}`; //changed this
-
-    res.redirect(redirectTarget);
-});
-
-router.get("/google/client-id", (req, res) => {
+router.get("/client-id", (req, res) => {
     const clientId = getGoogleClientId();
     res.status(200).json({ clientId });
 });
 
 /** Return the client key for use with Google Picker */
-router.get("/google/api-key", async (req, res) => {
+router.get("/api-key", async (req, res) => {
 
     res.status(200).json({ apiKey: process.env.GOOGLE_API_KEY });
 });
 
 /** Return the stored OAuth access token for use with Google Picker */
-router.get("/google/access-token", (req, res) => {
+router.get("/access-token", (req, res) => {
     const token = getGoogleAccessToken();
 
     if (!token) {
@@ -53,9 +86,12 @@ router.get("/google/access-token", (req, res) => {
 });
 
 /** Register a Google Drive watch channel for the selected folder */
-router.post("/google/setup-listener", async (req, res) => {
-    const { folderId, folderName} = req.body;
-    
+router.post("/setup-listener", async (req, res) => {
+    const { userId, email, folderId, folderName } = req.body;
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+
     if (!folderId || !folderName) {
         res.status(400).json({
             success: false,
@@ -63,38 +99,21 @@ router.post("/google/setup-listener", async (req, res) => {
         });
         return;
     }
-    const email = (global as any).googleUserEmail;
-
-    if (!email) {
-        return res.status(401).json({
-            success: false,
-            error: "Google email not found. Please sign in again."
-        });
-    }
 
     try {
-        await setupDriveWatch(folderId, folderName, email);
+        const mindmapperId = await setupDriveWatch(folderId, folderName, userId, email);
         res.status(200).json({
             message: "Drive watch registered",
-            success: true
+            success: true,
+            mindmapperId: mindmapperId
         });
     } catch (err: any) {
-        log.error(`Failed to set up Drive watch: ${err.message}`);
+        log.error(`Failed to set up Drive watch: ${err.errors}`);
         res.status(500).json({
-            error: err.message,
+            error: err,
             success: false
         });
     }
-});
-
-/**
- * Webhook endpoint — Google POSTs here whenever a Drive change happens.
- * Must respond 200 quickly; processing happens asynchronously.
- */
-router.post("/google/drive-webhook", (req, res) => {
-    res.sendStatus(200);
-    handleDriveWebhook(req.headers as Record<string, string | string[] | undefined>)
-        .catch((err) => log.error(`Error handling Drive webhook: ${err.message}`));
 });
 
 export default router;
