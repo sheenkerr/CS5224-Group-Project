@@ -31,7 +31,26 @@ export async function graphToNotes(graph: MindMap, documentName: string, exportP
   const response = await client.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [
-      { role: "system", content: "You are a concise note‑writer. Turn a knowledge‑graph JSON into clear, structured study notes. Use headings and bullet points. No code fences or JSON output." },
+      {
+        role: "system", content: `
+        You are an expert educational note-writer. Transform the provided knowledge-graph JSON into clear, comprehensive, and aesthetically pleasing study notes. 
+
+        Use the following formatting rules:
+        - Title: Start your output with a Level 1 Header structured exactly like this: # 📝 [Overarching Topic] (replace [Overarching Topic] with the main subject of the graph and not just the document name).
+        - Divider: Immediately follow the title with a markdown divider (---).
+        - Paragraphs: Use standard, descriptive paragraphs to explain concepts, provide context, and connect ideas smoothly. Do not rely solely on lists.
+        - Headers: Use standard headers for hierarchy (##, ###).
+        - Bullet points (- ): Use only for listing distinct attributes, multiple related facts, or itemized details. 
+        - Numbered lists (1. , 2. ): Use strictly for step-by-step processes or sequential timelines.
+        - Blockquotes (> ): Use to highlight key definitions, crucial takeaways, or warnings (these will be formatted as visual callouts).
+
+        Color Syntax Rules:
+        - Use double asterisks (**text**) for key points or emphasis. (This will be formatted as yellow text).
+        - Use double plus signs (++text++) for positive points, advantages, or pros. (This will be formatted as green text).
+        - Use double hyphens (==text==) for negative points, disadvantages, or cons. (This will be formatted as red text).
+
+        Keep the text engaging and easy to scan by balancing descriptive paragraphs with structured lists. Do not use Markdown code fences or output raw JSON.
+        `},
       { role: "user", content: `Write study notes for "${documentName}" focusing on ${exportPrompt}. Use the provided graph:\n\n${graphJson}` },
     ],
     temperature: 0.3,
@@ -63,23 +82,63 @@ async function findFirstPage(notionKey: string): Promise<string> {
 
 // Gemini 3.1 Pro was utilized to generate the code for this function
 // Append blocks to a Notion page (parsed from Markdown)
+
+// Helper function to handle custom color syntax (**, ++, ??)
+function parseRichText(text: string): any[] {
+  // Regex looks for text wrapped in **, ++, or ??
+  const regex = /(\*\*.*?\*\*|\+\+.*?\+\+|==.*?==)/g;
+  const parts = text.split(regex);
+  const richTextArray = [];
+
+  for (const part of parts) {
+    if (!part) continue;
+
+    // Yellow for key points
+    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+      richTextArray.push({
+        type: "text",
+        text: { content: part.slice(2, -2) },
+        annotations: { color: "yellow" }, // Changes text to yellow instead of bold
+      });
+    }
+    // Green for positive points
+    else if (part.startsWith("++") && part.endsWith("++") && part.length >= 4) {
+      richTextArray.push({
+        type: "text",
+        text: { content: part.slice(2, -2) },
+        annotations: { color: "green" },
+      });
+    }
+    // Red for negative points
+    else if (part.startsWith("==") && part.endsWith("==") && part.length >= 4) {
+      richTextArray.push({
+        type: "text",
+        text: { content: part.slice(2, -2) },
+        annotations: { color: "red" },
+      });
+    }
+    // Standard unformatted text
+    else {
+      richTextArray.push({
+        type: "text",
+        text: { content: part },
+      });
+    }
+  }
+  return richTextArray;
+}
+
+// Main function to parse markdown lines and push to Notion
 async function appendToPage(
   notionKey: string,
   pageId: string,
   notes: string,
-  documentName: string
+  documentName: string // You can remove this parameter now if you aren't using it elsewhere!
 ): Promise<void> {
   const lines = notes.split("\n");
-  const children: any[] = [
-    {
-      object: "block",
-      type: "heading_2",
-      heading_2: {
-        rich_text: [{ type: "text", text: { content: `📝 ${documentName} — Mind Map Notes` } }],
-      },
-    },
-    { object: "block", type: "divider", divider: {} },
-  ];
+
+  // Start with an empty array instead of the hardcoded documentName block
+  const children: any[] = [];
 
   for (let line of lines) {
     line = line.trim();
@@ -87,44 +146,73 @@ async function appendToPage(
 
     let block: any = null;
 
-    // headings
-    if (line.startsWith("### ")) {
+    // Divider
+    if (line === "---") {
+      block = {
+        object: "block",
+        type: "divider",
+        divider: {},
+      };
+    }
+    // Headings
+    else if (line.startsWith("### ")) {
       block = {
         object: "block",
         type: "heading_3",
-        heading_3: { rich_text: [{ type: "text", text: { content: line.replace(/^### /, "").slice(0, 2000) } }] },
+        heading_3: { rich_text: parseRichText(line.replace(/^### /, "").slice(0, 2000)) },
       };
     } else if (line.startsWith("## ")) {
       block = {
         object: "block",
         type: "heading_2",
-        heading_2: { rich_text: [{ type: "text", text: { content: line.replace(/^## /, "").slice(0, 2000) } }] },
+        heading_2: { rich_text: parseRichText(line.replace(/^## /, "").slice(0, 2000)) },
       };
     } else if (line.startsWith("# ")) {
       block = {
         object: "block",
         type: "heading_1",
-        heading_1: { rich_text: [{ type: "text", text: { content: line.replace(/^# /, "").slice(0, 2000) } }] },
+        heading_1: { rich_text: parseRichText(line.replace(/^# /, "").slice(0, 2000)) },
       };
     }
-    // bullet points
+    // Callouts (Parsed from markdown blockquotes)
+    else if (line.startsWith("> ")) {
+      block = {
+        object: "block",
+        type: "callout",
+        callout: {
+          rich_text: parseRichText(line.replace(/^>\s*/, "").slice(0, 2000)),
+          icon: { type: "emoji", emoji: "💡" },
+          color: "gray_background",
+        },
+      };
+    }
+    // Numbered Lists (Matches "1. ", "2. ", etc.)
+    else if (/^\d+\.\s/.test(line)) {
+      block = {
+        object: "block",
+        type: "numbered_list_item",
+        numbered_list_item: {
+          rich_text: parseRichText(line.replace(/^\d+\.\s*/, "").slice(0, 2000)),
+        },
+      };
+    }
+    // Bullet Points
     else if (line.startsWith("* ") || line.startsWith("- ")) {
       block = {
         object: "block",
         type: "bulleted_list_item",
         bulleted_list_item: {
-          rich_text: [{ type: "text", text: { content: line.replace(/^[*|-] /, "").slice(0, 2000) } }],
+          rich_text: parseRichText(line.replace(/^[*|-]\s*/, "").slice(0, 2000)),
         },
       };
     }
-
-    // else default to paragraph
+    // Default to paragraph
     else {
       block = {
         object: "block",
         type: "paragraph",
         paragraph: {
-          rich_text: [{ type: "text", text: { content: line.slice(0, 2000) } }],
+          rich_text: parseRichText(line.slice(0, 2000)),
         },
       };
     }
