@@ -163,7 +163,8 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setDeleteTarget(record);
+                      setActiveDocumentId(record.documentId);
+                      onViewSingle(record);
                     }}
                     className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md transition-colors cursor-pointer"
                   >

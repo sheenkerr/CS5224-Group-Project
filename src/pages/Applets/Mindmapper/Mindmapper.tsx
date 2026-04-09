@@ -7,6 +7,58 @@ import MindMapDocumentTable from "../../../components/MindMapDocumentTable";
 import { MindMap, MindMapRecord } from "../../../../backend/src/applets/mindmapper/types"
 import { useApi } from "../../../utils/api";
 
+const NotionExportPanel = ({
+  notionApiKey,
+  notionLoading,
+  onLogin,
+  onExport,
+  disabled
+}: {
+  notionApiKey: string | null;
+  notionLoading: boolean;
+  onLogin: () => void;
+  onExport: () => void;
+  disabled: boolean;
+}) => (
+  <div className="flex flex-col gap-3 mt-4 p-4 border border-gray-200 dark:border-gray-700/50 rounded-xl bg-gray-50 dark:bg-gray-800/30">
+    <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+      <span className="text-lg">📓</span> Export to Notion
+    </h3>
+    {!notionApiKey ? (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Connect your Notion account to export your active knowledge graph into a new page.
+        </p>
+        <button
+          onClick={onLogin}
+          className="w-full py-2 rounded-lg text-sm font-semibold transition-colors bg-white border border-gray-300 hover:bg-gray-100 text-black dark:bg-black dark:border-gray-600 dark:hover:bg-gray-900 dark:text-white cursor-pointer"
+        >
+          Login with Notion
+        </button>
+      </div>
+    ) : (
+      <div className="flex flex-col gap-2">
+        <div className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Connected to Notion
+        </div>
+        {!disabled && (
+          <button
+            onClick={onExport}
+            disabled={notionLoading}
+            className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors ${notionLoading
+                ? "bg-indigo-900/40 text-indigo-300/50 cursor-not-allowed"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+              }`}
+          >
+            {notionLoading ? "Exporting..." : "Export Flow to Notion"}
+          </button>
+        )}
+      </div>
+    )}
+  </div>
+);
+
 type MindmapperProps = {
   isSetup: boolean;
 };
@@ -31,10 +83,38 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [notionApiKey, setNotionApiKey] = useState<string | null>(null);
+  const [notionLoading, setNotionLoading] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("success")) setStage(1);
-  }, []);
+
+    const code = params.get("code");
+    if (code) {
+      const fetchToken = async () => {
+        try {
+          const res = await apiFetch(`/api/mindmapper/notion-token`, {
+            method: "POST",
+            body: JSON.stringify({ code }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            setNotionApiKey(data.access_token);
+            const url = new URL(window.location.href);
+            url.searchParams.delete("code");
+            url.searchParams.delete("state");
+            window.history.replaceState({}, document.title, url.pathname);
+          } else {
+            console.error("Failed to fetch Notion token:", data.error);
+          }
+        } catch (err) {
+          console.error("Notion token error:", err);
+        }
+      };
+      fetchToken();
+    }
+  }, [apiFetch, stage]);
 
   const handleExtract = async () => {
     if (!extractText.trim()) {
@@ -82,6 +162,57 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
     return null;
   };
 
+  {/**
+  * AI Usage Declaration
+  *
+  * Tool Used: Gemini 3.1 Pro
+  *
+  * Prompt:
+  * - How may I develop a login with notion oAuth feature so users do not need to generate an API key to utilize export to notion?
+  *
+  * How the AI Output Was Used:
+  * - Used a portion of suggested code for the below
+  */}
+
+  const handleNotionLogin = async () => {
+    try {
+      const res = await apiFetch(`/api/mindmapper/notion-auth-url?state=${encodeURIComponent(`ws-${mindmapperId || ""}`)}`);
+      const data = await res.json();
+      if (data.success && data.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch (err) {
+      console.error("Failed to fetch Notion auth URL", err);
+    }
+  };
+
+  const handleNotionExport = async () => {
+    const activeGraph = viewMode === "merged" ? mergedGraph : graph;
+    if (!activeGraph || !notionApiKey) return;
+
+    setNotionLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/mindmapper/export-notion`, {
+        method: "POST",
+        body: JSON.stringify({
+          documentId: `doc-${Date.now()}`,
+          documentName: viewMode === "merged" ? "All Documents Merged" : (activeDocumentName || extractName),
+          graph: activeGraph,
+          notionApiKey,
+          exportPrompt: "Exported from Mindmapper"
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      alert("Successfully exported to Notion!");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Notion export failed");
+    } finally {
+      setNotionLoading(false);
+    }
+  };
+
   const MindMapUI = (
     <div className="flex gap-6" style={{ height: "calc(100vh - 140px)" }}>
       {/* ── Left Panel ── */}
@@ -96,21 +227,19 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
         <div className="flex gap-2">
           <button
             onClick={() => setTab("documents")}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              tab === "documents"
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "documents"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
-            }`}
+              }`}
           >
             📄 Documents
           </button>
           <button
             onClick={() => setTab("extract")}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              tab === "extract"
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "extract"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
-            }`}
+              }`}
           >
             ✏️ Extract
           </button>
@@ -170,9 +299,8 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
             <button
               onClick={handleExtract}
               disabled={loading}
-              className={`py-3 rounded-lg text-white font-bold text-sm transition-colors ${
-                loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 cursor-pointer"
-              }`}
+              className={`py-3 rounded-lg text-white font-bold text-sm transition-colors ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 cursor-pointer"
+                }`}
             >
               {loading ? "Extracting..." : "Extract Graph →"}
             </button>
@@ -189,6 +317,18 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
                 <strong className="text-gray-900 dark:text-white">{graph.edges.length} edges</strong> extracted.
               </div>
             )}
+          </div>
+        )}
+
+        {tab === "documents" && (
+          <div className="mt-auto pt-2 pb-6">
+            <NotionExportPanel
+              notionApiKey={notionApiKey}
+              notionLoading={notionLoading}
+              onLogin={handleNotionLogin}
+              onExport={handleNotionExport}
+              disabled={!(viewMode === "merged" ? mergedGraph : graph)}
+            />
           </div>
         )}
       </div>

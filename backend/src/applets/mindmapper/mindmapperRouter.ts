@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { exportGraphToNotion } from "./exportToNotion";
 import { extractGraph } from "./extract";
 import {
   saveMindMap,
@@ -14,6 +15,7 @@ import { ExtractRequest, GraphEdge, GraphNode, MindMapRecord } from "./types";
 import { processNewDocument } from "./processDocuments";
 import { v4 as uuidv4 } from "uuid";
 import { requireAuth } from "../../middlewares/auth";
+import axios from "axios";
 
 const router = Router();
 router.use(requireAuth);
@@ -135,10 +137,10 @@ router.post("/:mindmapperId/merge", async (req, res) => {
 router.delete("/:mindmapperId/documents/:documentId", async (req, res) => {
   const userId = (req as any).userId;
   const { mindmapperId, documentId } = req.params;
-  
+
   console.log("DELETE request:", { userId, mindmapperId, documentId });
   console.log("Composite key will be:", `${mindmapperId}#${documentId}`);
-  
+
   try {
     await deleteMindMap(userId, mindmapperId, documentId);
     return res.status(200).json({ success: true });
@@ -168,6 +170,111 @@ router.post("/s3-webhook", async (req, res) => {
     processNewDocument(bucketName, objectKey, userId, mindmapperId, documentId).catch(console.error);
   } catch (err) {
     console.error("Webhook error:", err);
+  }
+});
+
+/**
+* AI Usage Declaration
+*
+* Tool Used: Gemini 3.1 Pro
+*
+* Prompt:
+* - How may I develop a login with notion oAuth feature so users do not need to generate an API key to utilize export to notion?
+*
+* How the AI Output Was Used:
+* - Used a portion of suggested code for the below
+*/
+
+// ── GET /api/mindmapper/notion-auth-url ─────────────────────
+router.get("/notion-auth-url", (req, res) => {
+  const clientId = process.env.NOTION_CLIENT_ID;
+  const redirectUri = process.env.NOTION_REDIRECT_URI;
+  const state = req.query.state as string;
+  if (!clientId || !redirectUri) {
+    return res.status(500).json({ success: false, error: "Notion OAuth not configured on server" });
+  }
+  let authUrl = `https://api.notion.com/v1/oauth/authorize?client_id=${clientId}&response_type=code&owner=user&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  if (state) {
+    authUrl += `&state=${encodeURIComponent(state)}`;
+  }
+  return res.status(200).json({ success: true, authUrl });
+});
+
+/**
+* AI Usage Declaration
+*
+* Tool Used: Gemini 3.1 Pro
+*
+* Prompt:
+* - How may I develop a login with notion oAuth feature so users do not need to generate an API key to utilize export to notion?
+*
+* How the AI Output Was Used:
+* - Used a portion of suggested code for the below
+*/
+
+// ── POST /api/mindmapper/notion-token ───────────────────────
+router.post("/notion-token", async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ success: false, error: "Missing authorization code" });
+  }
+
+  const clientId = process.env.NOTION_CLIENT_ID;
+  const clientSecret = process.env.NOTION_SECRET_KEY;
+  const redirectUri = process.env.NOTION_REDIRECT_URI;
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    return res.status(500).json({ success: false, error: "Notion OAuth not configured on server" });
+  }
+
+  try {
+    const encodedCredentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+
+    const response = await axios.post("https://api.notion.com/v1/oauth/token", {
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri
+    }, {
+      headers: {
+        Authorization: `Basic ${encodedCredentials}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const access_token = response.data.access_token;
+    return res.status(200).json({ success: true, access_token });
+  } catch (err: unknown) {
+    const message = axios.isAxiosError(err) && err.response?.data?.error
+      ? err.response.data.error
+      : err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ success: false, error: `Failed to fetch token: ${message}` });
+  }
+});
+
+/**
+* AI Usage Declaration
+*
+* Tool Used: Gemini 3.1 Pro
+*
+* Prompt:
+* - How may I develop a login with notion oAuth feature so users do not need to generate an API key to utilize export to notion?
+*
+* How the AI Output Was Used:
+* - Used a portion of suggested code for the below
+*/
+
+// ── POST /api/mindmapper/export-notion ──────────────────────
+router.post("/export-notion", async (req, res) => {
+  const { documentId, documentName, graph, notionApiKey, exportPrompt } = req.body;
+  if (!documentId || !documentName || !graph || !notionApiKey) {
+    return res.status(400).json({ success: false, error: "Missing required fields for Notion export." });
+  }
+  try {
+    const pageId = await exportGraphToNotion(graph, documentName, notionApiKey, exportPrompt);
+    return res.status(200).json({ success: true, pageId });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ success: false, error: message });
   }
 });
 

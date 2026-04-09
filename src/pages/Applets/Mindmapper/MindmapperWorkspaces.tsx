@@ -19,8 +19,16 @@ function MindmapperWorkspaces(): React.ReactElement {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (code && state && state.startsWith("ws-")) {
+      const mindmapperId = state.replace("ws-", "");
+      navigate(`/applets/mindmappers/${mindmapperId}?code=${code}`);
+      return;
+    }
     fetchWorkspaces();
-  }, []);
+  }, [navigate]);
 
   async function fetchWorkspaces() {
     try {
