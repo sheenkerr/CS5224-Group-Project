@@ -51,16 +51,44 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         setFolderError(false);
 
         try {
+            const token = await getToken();
+
             const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
                 userId: userId,
                 email: user!.primaryEmailAddress!.emailAddress,
                 folderId: selectedFolder?.id,
                 folderName: selectedFolder?.name,
-            });
+            },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
 
             if (response.data.success) {
-                setOpen(false);
-                return true;
+                const result = await axios.post(
+                    "http://localhost:8001/api/mindmapper/workspace",
+                    {
+                        userId: userId,
+                        mindmapperId: response.data.mindmapperId,
+                    },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+
+                if (result.status === 200) {
+                    setOpen(false);
+                    window.location.href = "/applets/mindmappers";
+                    return true;
+                } else {
+                    setSnackbarMessage(result.data.error || "Setup failed. Please try again.");
+                    setSnackbarOpen(true);
+                    return false;
+                }
             } else {
                 setSnackbarMessage(response.data.error || "Setup failed. Please try again.");
                 setSnackbarOpen(true);
