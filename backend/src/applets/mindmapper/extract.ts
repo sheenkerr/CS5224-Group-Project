@@ -3,13 +3,15 @@ dotenv.config();
 import Groq from "groq-sdk";
 import type { MindMap } from "./types";
 
-const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 export async function extractGraph(
   documentText: string,
-  extractionPrompt: string = "key concepts, people, organizations and ALL relationships between them, including indirect relationships",
+  extractionPrompt: string = "key concepts, people, organizations and ALL relationships between them",
   userApiKey?: string
 ): Promise<MindMap> {
+  const apiKey = userApiKey || process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY not configured.");
+  const client = new Groq({ apiKey });
+
   const response = await client.chat.completions.create({
     model: "llama-3.3-70b-versatile", // free on Groq
     messages: [
@@ -65,6 +67,16 @@ ${documentText}`
   if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
     throw new Error("Graph JSON missing nodes or edges.");
   }
+
+  // Deduplicate edges — remove reverse duplicates
+  const seenEdges = new Set<string>();
+  graph.edges = graph.edges.filter((e) => {
+    const forward = `${e.source}-${e.target}`;
+    const reverse = `${e.target}-${e.source}`;
+    if (seenEdges.has(forward) || seenEdges.has(reverse)) return false;
+    seenEdges.add(forward);
+    return true;
+  });
 
   return graph;
 }

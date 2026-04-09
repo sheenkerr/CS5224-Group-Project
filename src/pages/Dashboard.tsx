@@ -219,7 +219,7 @@ function Dashboard(): React.ReactElement | null {
             >
                 <div className="p-4" onClick={() => {
                     if (applet.name === "Mindmappers") {
-                        navigate(`/applets/${applet.name}/setup`);
+                        navigate(`/applets/mindmappers`);
                     } else {
                         navigate(`/applets/${applet.name}`);
                     }
