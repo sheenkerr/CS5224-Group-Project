@@ -140,17 +140,17 @@ export async function setupDriveWatch(folderId: string, folderName: string, user
     await mindmapper_object.save();
 
     // Send request to set up a workspace for this mindmap
-    const result = await axios.post(
-        "http://localhost:4001/api/mindmapper/workspace",
-        JSON.stringify({
-            "userId": userId,
-            "mindmapperId": mindmapper_object._id.toString(),
-        })
-    );
+    // const result = await axios.post(
+    //     "http://localhost:4001/api/mindmapper/workspace",
+    //     JSON.stringify({
+    //         "userId": userId,
+    //         "mindmapperId": mindmapper_object._id.toString(),
+    //     })
+    // );
 
-    if (result.status !== 200) {
-        throw new Error("Failed to set up workspace");
-    }
+    // if (result.status !== 200) {
+    //     throw new Error("Failed to set up workspace");
+    // }
 
     log.info(`Drive watch registered, channel: ${mindmapper_object_id.toString()}, expires: ${new Date(Number(expiration)).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })}`);
 }

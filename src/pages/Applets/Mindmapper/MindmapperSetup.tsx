@@ -1,7 +1,7 @@
 import React from "react";
 import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
-import { Dialog } from "@mui/material";
+import { Dialog, Alert, Snackbar } from "@mui/material";
 import { useUser, useAuth } from "@clerk/clerk-react";
 
 /** Shape of the folder selected by the Google Picker */
@@ -35,27 +35,47 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     const [open, setOpen] = React.useState(true);
     const [selectedFolder, setSelectedFolder] = React.useState<SelectedFolder | null>(null);
     const [pickerLoading, setPickerLoading] = React.useState(false);
+    const [folderError, setFolderError] = React.useState(false);
+    const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+    const [snackbarMessage, setSnackbarMessage] = React.useState("");
 
     /** Clerk's user id */
     const { userId, isLoaded: authLoaded, getToken } = useAuth();
     const { isLoaded, isSignedIn, user } = useUser();
 
-    const completeSetup = async () => {
-        /** Send the folder ID and the folder name to our backend */
-
-        const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
-            userId: userId,
-            email: user!.primaryEmailAddress!.emailAddress,
-            folderId: selectedFolder?.id,
-            folderName: selectedFolder?.name,
-        });
-
-        if (response.data.success) {
-            // TODO: Redirect to the mindmapper page not the setup page but this required the database as I need the unique id for the mindmapper setup
-            setOpen(false);
-        } else {
-            // Show an error message
+    const completeSetup = async (): Promise<boolean> => {
+        if (!selectedFolder) {
+            setFolderError(true);
+            return false;
         }
+        setFolderError(false);
+
+        try {
+            const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
+                userId: userId,
+                email: user!.primaryEmailAddress!.emailAddress,
+                folderId: selectedFolder?.id,
+                folderName: selectedFolder?.name,
+            });
+
+            if (response.data.success) {
+                setOpen(false);
+                return true;
+            } else {
+                setSnackbarMessage(response.data.error || "Setup failed. Please try again.");
+                setSnackbarOpen(true);
+                return false;
+            }
+        } catch (err: any) {
+            setSnackbarMessage(err?.response?.data?.error || err?.message || "An unexpected error occurred.");
+            setSnackbarOpen(true);
+            return false;
+        }
+    };
+
+    const handleSnackbarClose = (_event?: React.SyntheticEvent | Event, reason?: string) => {
+        if (reason === "clickaway") return;
+        setSnackbarOpen(false);
     };
 
     const googleLogin = async () => {
@@ -101,6 +121,7 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
                     if (data.action === google.picker.Action.PICKED) {
                         const doc = data.docs[0];
                         setSelectedFolder({ id: doc.id, name: doc.name });
+                        setFolderError(false);
                         setOpen(true);
                     } else if (data.action === google.picker.Action.CANCEL) {
                         setOpen(true);
@@ -143,6 +164,12 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
                 </p>
             </div>
 
+            {folderError && (
+                <Alert severity="error" variant="outlined" onClose={() => setFolderError(false)}>
+                    Please select a Google Drive folder.
+                </Alert>
+            )}
+
             {selectedFolder && (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/30 text-sm text-green-800 dark:text-green-300 self-start">
                     <span className="font-medium">Folder selected: {selectedFolder.name}</span>
@@ -170,6 +197,12 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
                     onComplete={completeSetup}
                 />
             </Dialog>
+
+            <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleSnackbarClose}>
+                <Alert onClose={handleSnackbarClose} severity="error" variant="filled" sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
         </main>
     );
 }

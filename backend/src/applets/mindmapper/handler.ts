@@ -69,9 +69,9 @@ router.post("/google/setup-listener", async (req, res) => {
             success: true
         });
     } catch (err: any) {
-        log.error(`Failed to set up Drive watch: ${err.message}`);
+        log.error(`Failed to set up Drive watch: ${err.errors}`);
         res.status(500).json({
-            error: err.message,
+            error: err,
             success: false
         });
     }
