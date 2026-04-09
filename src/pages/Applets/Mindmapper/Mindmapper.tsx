@@ -42,16 +42,18 @@ const NotionExportPanel = ({
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           Connected to Notion
         </div>
-        <button
-          onClick={onExport}
-          disabled={disabled || notionLoading}
-          className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors ${disabled || notionLoading
-              ? "bg-indigo-900/40 text-indigo-300/50 cursor-not-allowed"
-              : "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
-            }`}
-        >
-          {notionLoading ? "Exporting..." : "Export Flow to Notion"}
-        </button>
+        {!disabled && (
+          <button
+            onClick={onExport}
+            disabled={notionLoading}
+            className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-colors ${notionLoading
+                ? "bg-indigo-900/40 text-indigo-300/50 cursor-not-allowed"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+              }`}
+          >
+            {notionLoading ? "Exporting..." : "Export Flow to Notion"}
+          </button>
+        )}
       </div>
     )}
   </div>
@@ -318,7 +320,7 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
           </div>
         )}
 
-        {tab === "documents" && (graph || mergedGraph) && (
+        {tab === "documents" && (
           <div className="mt-auto pt-2 pb-6">
             <NotionExportPanel
               notionApiKey={notionApiKey}
