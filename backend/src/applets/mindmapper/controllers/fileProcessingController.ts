@@ -18,7 +18,7 @@ export async function processNewFiles(activeChannel: IMindmapper) {
     // Fetch the actual list of changes since the last page token
     const changesRes = await drive.changes.list({
         pageToken: activeChannel.page_token,
-        // We ask Google to return the new token, and the file details we care about
+        // Ask Google to return the new token, and the file details we care about
         fields: "newStartPageToken, changes(fileId, file(name, mimeType, parents, trashed))",
     });
 

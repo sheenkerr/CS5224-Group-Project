@@ -3,6 +3,7 @@ import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
 import { Dialog, Alert, Snackbar } from "@mui/material";
 import { useUser, useAuth } from "@clerk/clerk-react";
+import { useApi } from "../../../utils/api";
 
 /** Shape of the folder selected by the Google Picker */
 type SelectedFolder = {
@@ -39,6 +40,8 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     const [snackbarOpen, setSnackbarOpen] = React.useState(false);
     const [snackbarMessage, setSnackbarMessage] = React.useState("");
 
+    const { apiFetch } = useApi();
+
     /** Clerk's user id */
     const { userId, isLoaded: authLoaded, getToken } = useAuth();
     const { isLoaded, isSignedIn, user } = useUser();
@@ -51,46 +54,40 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         setFolderError(false);
 
         try {
-            const token = await getToken();
+            const response = await apiFetch(`/api/mindmapper/google/setup-listener`, {
+                method: "POST",
+                body: JSON.stringify({
+                    userId: userId,
+                    email: user!.primaryEmailAddress!.emailAddress,
+                    folderId: selectedFolder?.id,
+                    folderName: selectedFolder?.name,
+                }),
+            });
 
-            const response = await axios.post(`${API_BASE_URL}/api/mindmapper/google/setup-listener`, {
-                userId: userId,
-                email: user!.primaryEmailAddress!.emailAddress,
-                folderId: selectedFolder?.id,
-                folderName: selectedFolder?.name,
-            },
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
+            const data = await response.json();
 
-            if (response.data.success) {
-                const result = await axios.post(
-                    "http://localhost:8001/api/mindmapper/workspace",
-                    {
+            if (data.success) {
+                const result = await apiFetch(`/api/mindmapper/workspace`, {
+                    method: "POST",
+                    body: JSON.stringify({
                         userId: userId,
-                        mindmapperId: response.data.mindmapperId,
-                    },
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
-                );
+                        mindmapperId: data.mindmapperId,
+                    }),
+                });
 
-                if (result.status === 200) {
+                const resultData = await result.json();
+
+                if (resultData.success) {
                     setOpen(false);
                     window.location.href = "/applets/mindmappers";
                     return true;
                 } else {
-                    setSnackbarMessage(result.data.error || "Setup failed. Please try again.");
+                    setSnackbarMessage(resultData.error || "Setup failed. Please try again.");
                     setSnackbarOpen(true);
                     return false;
                 }
             } else {
-                setSnackbarMessage(response.data.error || "Setup failed. Please try again.");
+                setSnackbarMessage(data.error || "Setup failed. Please try again.");
                 setSnackbarOpen(true);
                 return false;
             }
@@ -107,8 +104,9 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     };
 
     const googleLogin = async () => {
-        const response = await axios.get(`${API_BASE_URL}/api/mindmapper/google/login-url`);
-        const authUrl = response.data.authUrl;
+        const response = await apiFetch(`/api/mindmapper/google/login-url`);
+        const data = await response.json();
+        const authUrl = data.authUrl;
         window.location.href = authUrl;
     };
 
@@ -119,12 +117,15 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
         try {
             // Fetch access token and API key from the backend
             const [tokenRes, apiKeyRes] = await Promise.all([
-                axios.get(`${API_BASE_URL}/api/mindmapper/google/access-token`),
-                axios.get(`${API_BASE_URL}/api/mindmapper/google/api-key`),
+                apiFetch(`/api/mindmapper/google/access-token`),
+                apiFetch(`/api/mindmapper/google/api-key`),
             ]);
 
-            const accessToken: string = tokenRes.data.access_token;
-            const apiKey: string = apiKeyRes.data.apiKey;
+            const tokenData = await tokenRes.json();
+            const apiKeyData = await apiKeyRes.json();
+
+            const accessToken: string = tokenData.access_token;
+            const apiKey: string = apiKeyData.apiKey;
 
             // Load the Google API client library
             await loadScript("https://apis.google.com/js/api.js");

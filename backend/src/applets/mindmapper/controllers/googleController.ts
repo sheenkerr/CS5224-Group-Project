@@ -258,7 +258,7 @@ export async function refreshDriveWatch(mindmapper_object: IMindmapper, oauth2Cl
         console.log(`Old channel ${oldChannelId} could not be stopped (likely already expired).`);
     }
 
-    // 3. Create a NEW unique ID for Google by appending the current timestamp
+    // Create a NEW unique ID for Google by appending the current timestamp
     const newChannelId = `${mindmapper_object._id.toString()}-${Date.now()}`;
 
     const webhookBase = process.env.BACKEND_URL;
@@ -286,6 +286,5 @@ export async function refreshDriveWatch(mindmapper_object: IMindmapper, oauth2Cl
     mindmapper_object.resource_id = resourceId;
     mindmapper_object.expiration = expirationDate;
 
-    // Save it back to MongoDB!
     await mindmapper_object.save();
 }

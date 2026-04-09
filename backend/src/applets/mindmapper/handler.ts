@@ -11,12 +11,6 @@ router.get("/", (req, res) => {
     res.status(200).json({ message: "Mindmapper routes are imported" });
 });
 
-router.get("/login-url", (req, res) => {
-    const authUrl = getGoogleLoginUrl();
-
-    res.status(200).json({ authUrl });
-});
-
 /** Callback for google to send us data */
 router.get("/callback", async (req, res) => {
 
@@ -27,6 +21,46 @@ router.get("/callback", async (req, res) => {
     const redirectTarget = `${frontendUrl}/applets/Mindmappers/setup?success=${result}`;
 
     res.redirect(redirectTarget);
+});
+
+/**
+ * Webhook endpoint — Google POSTs here whenever a Drive change happens.
+ * Must respond 200 quickly; processing happens asynchronously.
+ */
+router.post("/drive-webhook", (req, res) => {
+    res.sendStatus(200);
+    handleDriveWebhook(req.headers as Record<string, string | string[] | undefined>)
+        .catch((err) => log.error(`Error handling Drive webhook: ${err.message}`));
+});
+
+/** To refresh all the webhooks that are expiring soon */
+router.post('/refresh-webhooks', async (req, res) => {
+    try {
+
+        const apiKey = req.headers['x-api-key'];
+        if (apiKey !== process.env.AWS_CRON_SECRET) {
+            return res.status(401).send("Unauthorized");
+        }
+
+        const result = await processWebhookRefreshes();
+
+        console.log(result);
+
+        res.status(200).send("Refresh cycle complete");
+
+    } catch (error) {
+        // Catch any critical errors that bubble up from the service
+        console.error("[Webhook Cron] Critical error during refresh cycle:", error);
+        return res.status(500).send("Internal server error during refresh cycle.");
+    }
+});
+
+router.use(requireAuth);
+
+router.get("/login-url", (req, res) => {
+    const authUrl = getGoogleLoginUrl();
+
+    res.status(200).json({ authUrl });
 });
 
 router.get("/client-id", (req, res) => {
@@ -79,38 +113,6 @@ router.post("/setup-listener", async (req, res) => {
             error: err,
             success: false
         });
-    }
-});
-
-/**
- * Webhook endpoint — Google POSTs here whenever a Drive change happens.
- * Must respond 200 quickly; processing happens asynchronously.
- */
-router.post("/drive-webhook", (req, res) => {
-    res.sendStatus(200);
-    handleDriveWebhook(req.headers as Record<string, string | string[] | undefined>)
-        .catch((err) => log.error(`Error handling Drive webhook: ${err.message}`));
-});
-
-/** To refresh all the webhooks that are expiring soon */
-router.post('/refresh-webhooks', async (req, res) => {
-    try {
-
-        const apiKey = req.headers['x-api-key'];
-        if (apiKey !== process.env.AWS_CRON_SECRET) {
-            return res.status(401).send("Unauthorized");
-        }
-
-        const result = await processWebhookRefreshes();
-
-        console.log(result);
-
-        res.status(200).send("Refresh cycle complete");
-
-    } catch (error) {
-        // Catch any critical errors that bubble up from the service
-        console.error("[Webhook Cron] Critical error during refresh cycle:", error);
-        return res.status(500).send("Internal server error during refresh cycle.");
     }
 });
 
