@@ -6,22 +6,35 @@ import { createLogger } from "./utils/logger";
 import { clerkAuth } from "./middlewares/auth";
 import mindMapRouter from "./applets/mindmapper/mindmapperRouter";
 import googleRouter from "./applets/mindmapper/handler";
-import { connectToDatabase } from "./utils/database";
 
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.BACKEND_PORT ?? 4001;
+const PORT = process.env.BACKEND_PORT ?? process.env.PORT ?? 4001;
 const log = createLogger("Server");
+const allowedOrigins = [
+  process.env.CORS_ALLOWED_ORIGINS,
+  process.env.FRONTEND_URL,
+]
+  .flatMap((value) => (value ?? "").split(","))
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 // -------------------
 // CORS configuration
 // -------------------
 app.use(cors({
-  origin: 'http://localhost:4000', // React frontend
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true, // if you need cookies/auth
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Origin ${origin} is not allowed by CORS`));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: true,
 }));
 
 // -------------------
@@ -46,14 +59,6 @@ app.use("/api", apiRouter);
 // -------------------
 async function startServer() {
   try {
-    // Attempt to connect to MongoDB if URI exists
-    if (process.env.MONGODB_URI) {
-      await connectToDatabase(process.env.MONGODB_URI);
-      log.info("MongoDB connected successfully");
-    } else {
-      log.warn("No MongoDB URI provided, skipping DB connection");
-    }
-
     const server = app.listen(PORT, () => {
       log.info(`Server running on http://localhost:${PORT}`);
     });

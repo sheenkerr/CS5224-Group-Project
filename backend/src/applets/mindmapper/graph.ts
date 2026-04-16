@@ -1,8 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
-  DynamoDBDocumentClient,
   PutCommand,
   GetCommand,
   QueryCommand,
@@ -11,13 +9,11 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import Groq from "groq-sdk";
 import { MindMap, MindMapRecord, MindMapWorkspace, GraphNode, GraphEdge } from "./types";
-
-const client = new DynamoDBClient({ region: process.env.AWS_REGION ?? "ap-southeast-1" });
-const dynamo = DynamoDBDocumentClient.from(client);
+import { DYNAMO_TABLES, dynamo } from "../../utils/dynamo";
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const GRAPHS_TABLE = process.env.MINDMAPPER_TABLE ?? "mindmapper-graphs";
-const WORKSPACES_TABLE = "mindmapper-workspaces";
+const GRAPHS_TABLE = DYNAMO_TABLES.mindmapperGraphs;
+const WORKSPACES_TABLE = DYNAMO_TABLES.mindmapperWorkspaces;
 
 // ── Helper ──────────────────────────────────────────────────
 function makeDocId(mindmapperId: string, documentId: string) {
@@ -75,7 +71,7 @@ export async function saveMindMap(
   };
 
   await dynamo.send(
-    new PutCommand({ TableName: "mindmapper-graphs", Item: record })
+    new PutCommand({ TableName: GRAPHS_TABLE, Item: record })
   );
 
   return record;
