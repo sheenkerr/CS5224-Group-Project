@@ -1,6 +1,21 @@
 export interface MindMapWorkspace {
   userId: string;
-  mindmapperId: string;   // matches the applet ID from MongoDB
+  mindmapperId: string;
+  createdAt: number;
+}
+
+export interface MindmapperWatchRecord {
+  mindmapperId: string;
+  userId: string;
+  email: string;
+  refreshToken: string;
+  folderId: string;
+  folderName: string;
+  pageToken: string;
+  channelId: string;
+  resourceId?: string;
+  expiration?: number;
+  status: "pending" | "active" | "error" | "expired";
   createdAt: number;
 }
 

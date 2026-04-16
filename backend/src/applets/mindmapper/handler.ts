@@ -18,7 +18,7 @@ router.get("/callback", async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL;
 
-    const redirectTarget = `${frontendUrl}/applets/Mindmappers/setup?success=${result}`;
+    const redirectTarget = `${frontendUrl}/applets/mindmappers/setup?success=${result}`;
 
     res.redirect(redirectTarget);
 });
