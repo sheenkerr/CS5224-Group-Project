@@ -6,20 +6,14 @@ import { getUserOAuthClient } from "../controllers/googleController";
 import { saveMindmapperWatch } from "../googleWatchStore";
 import { MindmapperWatchRecord } from "../types";
 
-function getS3Config(): {
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-} {
+function getAwsRegion(): string {
   const region = process.env.AWS_REGION;
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 
-  if (!region || !accessKeyId || !secretAccessKey) {
-    throw new Error("Missing AWS credentials in environment variables");
+  if (!region) {
+    throw new Error("Missing AWS_REGION in environment variables");
   }
 
-  return { region, accessKeyId, secretAccessKey };
+  return region;
 }
 
 function getBackendInternalUrl(): string {
@@ -90,13 +84,8 @@ export async function transferDriveFileToS3(
   fileId: string,
   fileName: string
 ): Promise<boolean> {
-  const s3Config = getS3Config();
   const s3Client = new S3Client({
-    region: s3Config.region,
-    credentials: {
-      accessKeyId: s3Config.accessKeyId,
-      secretAccessKey: s3Config.secretAccessKey,
-    },
+    region: getAwsRegion(),
   });
 
   try {

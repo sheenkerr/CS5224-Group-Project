@@ -51,7 +51,7 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v3
         with:
-          base: ${{ github.ref }}
+          base: ${{ github.event.before }}
           filters: |
             frontend:
               - '.github/workflows/deploy.yml'
@@ -68,27 +68,120 @@ jobs:
               - '.github/workflows/deploy.yml'
               - 'backend/**'
 
-  deploy-frontend:
-    name: Build & Deploy Frontend
+  deploy-backend:
+    name: Build & Deploy Backend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     environment: production
     env:
       AWS_PAGER: ""
-      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_REGION: us-east-2
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      CF_DIST_ID: ${{ vars.CF_DIST_ID }}
-      S3_CDN_BUCKET: ${{ vars.S3_CDN_BUCKET }}
-      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      ECR_BACKEND_REPOSITORY: flowfox
+      ECS_CLUSTER_NAME: flowfox-cluster
+      ECS_BACKEND_SERVICE: API
+      ECS_TASK_FAMILY: flowfox-api
+      ECS_CONTAINER_NAME: flowfox-api
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate AWS auth configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$AWS_ROLE_ARN" ]]; then
+            echo "::error::Missing AWS_ROLE_ARN. OIDC is required by this workflow."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure Amazon ECR repository exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$ECR_BACKEND_REPOSITORY" == http://* || "$ECR_BACKEND_REPOSITORY" == https://* || "$ECR_BACKEND_REPOSITORY" == *.amazonaws.com/* ]]; then
+            echo "::error::ECR_BACKEND_REPOSITORY must be only the repository name, for example 'flowfox-backend'."
+            exit 1
+          fi
+
+          if ! aws ecr describe-repositories --repository-names "$ECR_BACKEND_REPOSITORY" >/dev/null 2>&1; then
+            aws ecr create-repository --repository-name "$ECR_BACKEND_REPOSITORY" >/dev/null
+          fi
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set backend image URI
+        id: backend-image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "image=${{ steps.login-ecr.outputs.registry }}/${ECR_BACKEND_REPOSITORY}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ steps.backend-image.outputs.image }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Render Amazon ECS task definition
+        id: taskdef
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ env.ECS_TASK_FAMILY }}
+          container-name: ${{ env.ECS_CONTAINER_NAME }}
+          image: ${{ steps.backend-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.taskdef.outputs.task-definition }}
+          service: ${{ env.ECS_BACKEND_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER_NAME }}
+          wait-for-service-stability: true
+          wait-max-delay-seconds: 15
+
+  deploy-frontend:
+    name: Build & Deploy Frontend
+    needs:
+      - changes
+      - deploy-backend
+    if: ${{ always() && needs.changes.outputs.frontend == 'true' && (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_PAGER: ""
+      AWS_REGION: us-east-2
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      CF_DIST_ID: EFFBYWJSMTVJS
+      S3_CDN_BUCKET: cdn-flowfox
+      VITE_API_BASE_URL: https://api.flowfox.dev
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
-      VITE_CLOUDFRONT_URL: ${{ vars.VITE_CLOUDFRONT_URL }}
-      VITE_CUSTOM_DOMAIN: ${{ vars.VITE_CUSTOM_DOMAIN }}
     steps:
       - name: Checkout frontend files
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
+            public
             src
             index.html
             package-lock.json
@@ -99,6 +192,22 @@ jobs:
             vite.config.ts
           sparse-checkout-cone-mode: false
 
+      - name: Validate AWS auth configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$AWS_ROLE_ARN" ]]; then
+            echo "::error::Missing AWS_ROLE_ARN. OIDC is required by this workflow."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -106,50 +215,29 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Validate frontend configuration
         shell: bash
         run: |
-          if [[ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]]; then
-            echo "::error::Missing VITE_CLERK_PUBLISHABLE_KEY in the production environment variables."
-            exit 1
-          fi
+          set -euo pipefail
 
-          if [[ -z "$VITE_API_BASE_URL" ]]; then
-            echo "::error::Missing VITE_API_BASE_URL in the production environment variables."
-            exit 1
-          fi
+          required_vars=(
+            VITE_CLERK_PUBLISHABLE_KEY
+          )
 
-          if [[ -z "$S3_CDN_BUCKET" || -z "$CF_DIST_ID" ]]; then
-            echo "::error::Missing S3_CDN_BUCKET or CF_DIST_ID in the production environment variables."
-            exit 1
-          fi
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name:-}" ]]; then
+              echo "::error::Missing required GitHub variable: $var_name"
+              exit 1
+            fi
+          done
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build frontend
+        env:
+          VITE_API_URL: ${{ env.VITE_API_BASE_URL }}
         run: npm run build
-
-      - name: Validate AWS auth configuration
-        shell: bash
-        run: |
-          if [[ -z "$AWS_REGION" ]]; then
-            echo "::error::Missing AWS_REGION. Add it as a GitHub Actions variable or secret on the production environment."
-            exit 1
-          fi
-
-          if [[ -z "$AWS_ROLE_ARN" && ( -z "${{ secrets.AWS_ACCESS_KEY_ID }}" || -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ) ]]; then
-            echo "::error::Missing AWS credentials. Set AWS_ROLE_ARN as a GitHub Actions variable/secret for OIDC, or add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets."
-            exit 1
-          fi
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
 
       - name: Upload assets to S3
         run: aws s3 sync dist "s3://$S3_CDN_BUCKET" --delete --exclude "index.html" --cache-control "public,max-age=31536000,immutable"
@@ -159,82 +247,3 @@ jobs:
 
       - name: Invalidate CloudFront paths
         run: aws cloudfront create-invalidation --distribution-id "$CF_DIST_ID" --paths "/*"
-
-  deploy-backend:
-    name: Build & Deploy Backend
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      AWS_PAGER: ""
-      AWS_REGION: ${{ vars.AWS_REGION  }}
-      AWS_ROLE_ARN: ${{  secrets.AWS_ROLE_ARN }}
-      ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }}
-      ECS_BACKEND_SERVICE: ${{ vars.ECS_BACKEND_SERVICE }}
-      ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
-    steps:
-      - name: Checkout backend files
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: backend
-
-      - name: Validate AWS auth configuration
-        shell: bash
-        run: |
-          if [[ -z "$AWS_REGION" ]]; then
-            echo "::error::Missing AWS_REGION. Add it as a GitHub Actions variable or secret on the production environment."
-            exit 1
-          fi
-
-          if [[ -z "$AWS_ROLE_ARN" && ( -z "${{ secrets.AWS_ACCESS_KEY_ID }}" || -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ) ]]; then
-            echo "::error::Missing AWS credentials. Set AWS_ROLE_ARN as a GitHub Actions variable/secret for OIDC, or add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets."
-            exit 1
-          fi
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Validate ECR repository config
-        shell: bash
-        run: |
-          if [[ "$ECR_BACKEND_REPOSITORY" == http://* || "$ECR_BACKEND_REPOSITORY" == https://* || "$ECR_BACKEND_REPOSITORY" == *.amazonaws.com/* ]]; then
-            echo "::error::ECR_BACKEND_REPOSITORY must be only the ECR repository name, for example 'flowfox', not a full URL or registry path."
-            echo "::error::Set AWS_REGION to the AWS region where that ECR repository exists."
-            exit 1
-          fi
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Prepare backend image metadata
-        id: backend-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}
-          tags: |
-            type=raw,value=${{ github.sha }}
-            type=raw,value=latest
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: ${{ steps.backend-meta.outputs.tags }}
-          labels: ${{ steps.backend-meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Update Amazon ECS service
-        run: aws ecs update-service --cluster "$ECS_CLUSTER_NAME" --service "$ECS_BACKEND_SERVICE" --force-new-deployment
