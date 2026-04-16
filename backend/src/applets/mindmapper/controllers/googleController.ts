@@ -1,290 +1,296 @@
-import axios from "axios";
 import { google } from "googleapis";
 import oauth2Client from "../../../middlewares/googleAuthMiddleware";
 import { createLogger } from "../../../utils/logger";
 import { processNewFiles } from "./fileProcessingController";
-import { IMindmapper } from "../../../models/mindmapper_model";
-import Mindmapper from "../../../models/mindmapper_model";
+import { v4 as uuidv4 } from "uuid";
+import {
+  getMindmapperWatch,
+  listExpiringMindmapperWatches,
+  saveMindmapperWatch,
+} from "../googleWatchStore";
+import { MindmapperWatchRecord } from "../types";
 
 const log = createLogger("Mindmapper");
+const CHANNEL_SEPARATOR = "__";
+const GOOGLE_DRIVE_SCOPES = [
+  "https://www.googleapis.com/auth/drive.metadata.readonly",
+  "https://www.googleapis.com/auth/drive.readonly",
+];
 
-export function getGoogleAccessToken() {
-    return oauth2Client.credentials?.access_token;
+function getWebhookBaseUrl(): string {
+  return (process.env.GOOGLE_WEBHOOK_BASE_URL || process.env.BACKEND_URL || "").replace(/\/$/, "");
 }
 
-export function getGoogleClientId() {
-    return process.env.GOOGLE_CLIENT_ID;
+function getMindmapperIdFromChannelId(channelId: string): string {
+  const [mindmapperId] = channelId.split(CHANNEL_SEPARATOR);
+  return mindmapperId ?? channelId;
 }
 
-export function getGoogleLoginUrl() {
-    const SCOPE = [
-        "https://www.googleapis.com/auth/drive.metadata.readonly",
-        "https://www.googleapis.com/auth/drive.readonly",
-    ];
-
-    const authUrl = oauth2Client.generateAuthUrl({
-        access_type: "offline",
-        scope: SCOPE,
-        prompt: "consent select_account",
-    });
-
-    return authUrl;
+function getChannelId(mindmapperId: string): string {
+  return `${mindmapperId}${CHANNEL_SEPARATOR}${Date.now()}`;
 }
 
-export async function getUserOAuthClient(refresh_token: string) {
-    const userSpecificOAuthClient = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-        process.env.GOOGLE_REDIRECT_URI
-    );
+function getExpirationTimestamp(expiration: string | null | undefined): number {
+  if (!expiration) {
+    throw new Error("Drive watch did not respond with an expiration timestamp");
+  }
 
-    userSpecificOAuthClient.setCredentials({
-        refresh_token: refresh_token,
-    });
-
-    return userSpecificOAuthClient;
+  return Number(expiration);
 }
 
-export async function handleGoogleCallback(req: any) {
-    const error = req.query.error as string | undefined;
-    if (error) {
-        return false;
-    }
+function getDriveWebhookAddress(): string {
+  const webhookBaseUrl = getWebhookBaseUrl();
+  if (!webhookBaseUrl) {
+    throw new Error("GOOGLE_WEBHOOK_BASE_URL or BACKEND_URL is not defined");
+  }
 
-    const code = req.query.code as string | undefined;
-    if (!code) {
-        return false;
-    }
+  return `${webhookBaseUrl}/api/mindmapper/google/drive-webhook`;
+}
 
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
-    const oauth2 = google.oauth2({
-        auth: oauth2Client,
-        version: "v2",
-    });
+export function getGoogleAccessToken(): string | null | undefined {
+  return oauth2Client.credentials?.access_token;
+}
 
-    // try {
-    //     const { data } = await oauth2.userinfo.get();
-    //     (global as any).googleUserEmail = data.email;
-    // } catch (err) {
-    //     console.error("Failed to get user email:", err);
-    // }
-    return true;
+export function getGoogleClientId(): string | undefined {
+  return process.env.GOOGLE_CLIENT_ID;
+}
+
+export function getGoogleLoginUrl(): string {
+  return oauth2Client.generateAuthUrl({
+    access_type: "offline",
+    scope: GOOGLE_DRIVE_SCOPES,
+    prompt: "consent select_account",
+  });
+}
+
+export async function getUserOAuthClient(refreshToken: string): Promise<InstanceType<typeof google.auth.OAuth2>> {
+  const userSpecificOAuthClient = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+
+  userSpecificOAuthClient.setCredentials({
+    refresh_token: refreshToken,
+  });
+
+  return userSpecificOAuthClient;
+}
+
+export async function handleGoogleCallback(req: any): Promise<boolean> {
+  const error = req.query.error as string | undefined;
+  if (error) {
+    return false;
+  }
+
+  const code = req.query.code as string | undefined;
+  if (!code) {
+    return false;
+  }
+
+  const { tokens } = await oauth2Client.getToken(code);
+  oauth2Client.setCredentials(tokens);
+  return true;
 }
 
 /**
  * Register a Google Drive changes watch channel for the given folder.
  * Google will POST to our webhook endpoint whenever anything changes.
  */
-export async function setupDriveWatch(folderId: string, folderName: string, userId: string, email: string) {
+export async function setupDriveWatch(
+  folderId: string,
+  folderName: string,
+  userId: string,
+  email: string
+): Promise<string> {
+  const drive = google.drive({ version: "v3", auth: oauth2Client });
+  const tokenRes = await drive.changes.getStartPageToken({});
+  const pageToken = tokenRes.data.startPageToken;
 
-    const drive = google.drive({ version: "v3", auth: oauth2Client });
+  if (!pageToken) {
+    throw new Error("Could not retrieve a start page token from Drive API");
+  }
 
-    // Get a baseline page token so we only see changes from NOW onward
-    const tokenRes = await drive.changes.getStartPageToken({});
-    const pageToken = tokenRes.data.startPageToken;
-    if (!pageToken) {
-        throw new Error("Could not retrieve a start page token from Drive API");
-    }
+  const refreshToken = oauth2Client.credentials.refresh_token;
+  if (!refreshToken) {
+    throw new Error("No Google refresh token available");
+  }
 
-    // Build the public webhook URL
-    const webhookBase = process.env.BACKEND_URL;
-    if (!webhookBase) {
-        throw new Error("BACKEND_URL is not defined");
-    }
+  const mindmapperId = uuidv4();
+  const channelId = getChannelId(mindmapperId);
+  const watchRes = await drive.changes.watch({
+    pageToken,
+    requestBody: {
+      id: channelId,
+      type: "web_hook",
+      address: getDriveWebhookAddress(),
+    },
+  });
+  const { resourceId, expiration } = watchRes.data;
 
-    // This just links to our backend endpoint
-    const webhookAddress = `${webhookBase}/api/mindmapper/google/drive-webhook`;
+  if (!resourceId) {
+    throw new Error("Drive watch did not respond with a resource ID");
+  }
 
-    const partialApplet = new Mindmapper({
-        user_id: userId,
-        email: email,
-        refresh_token: oauth2Client.credentials.refresh_token,
-        folder_id: folderId,
-        folder_name: folderName,
-        page_token: pageToken,
-    });
+  const expirationTimestamp = getExpirationTimestamp(expiration);
+  const watchRecord: MindmapperWatchRecord = {
+    mindmapperId,
+    userId,
+    email,
+    refreshToken,
+    folderId,
+    folderName,
+    pageToken,
+    channelId,
+    resourceId,
+    expiration: expirationTimestamp,
+    status: "active",
+    createdAt: Date.now(),
+  };
 
-    // Save to database to generate the _id
-    const mindmapper_object = await partialApplet.save();
-    const mindmapper_object_id = `${mindmapper_object._id.toString()}-${Date.now()}`;
+  await saveMindmapperWatch(watchRecord);
 
-    // Register the watch channel
-    const watchRes = await drive.changes.watch({
-        pageToken,
-        requestBody: {
-            id: mindmapper_object_id,
-            type: "web_hook",
-            address: webhookAddress,
-        },
-    });
+  log.info(
+    `Drive watch registered, channel: ${channelId}, expires: ${new Date(expirationTimestamp).toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`
+  );
 
-    const { resourceId, expiration } = watchRes.data;
-    if (!resourceId || !expiration) {
-        throw new Error("Drive watch did not respond to our request");
-    };
-
-    // Google returns the expiration as a string of Unix epoch time (milliseconds)
-    // Example: "1698765432100". We parse it into an integer, then convert it to a Date.
-    const expirationDate = new Date(parseInt(expiration, 10));
-
-    // Update the Mongoose document properties
-    mindmapper_object.channel_id = mindmapper_object_id;
-    mindmapper_object.resource_id = resourceId;
-    mindmapper_object.expiration = expirationDate;
-
-    mindmapper_object.page_token = pageToken;
-    mindmapper_object.status = "active";
-
-    // Save the updated document back to MongoDB
-    await mindmapper_object.save();
-
-    log.info(`Drive watch registered, channel: ${mindmapper_object_id.toString()}, expires: ${new Date(Number(expiration)).toLocaleString('en-SG', { timeZone: 'Asia/Singapore' })}`);
-
-    return mindmapper_object._id.toString();
+  return mindmapperId;
 }
 
 /**
  * Handle an incoming Drive push-notification webhook.
  * Google always expects a 200 response quickly, so do the heavy lifting async.
  */
-export async function handleDriveWebhook(headers: Record<string, string | string[] | undefined>) {
-    // Extract the Google headers
-    const googleChannelId: any = headers['x-goog-channel-id'];
-    const channelId = googleChannelId.split('-')[0];
-    const resourceState = headers["x-goog-resource-state"] as string;
-    const resourceId = headers["x-goog-resource-id"] as string;
+export async function handleDriveWebhook(
+  headers: Record<string, string | string[] | undefined>
+): Promise<void> {
+  const googleChannelId = headers["x-goog-channel-id"];
+  const fullChannelId = Array.isArray(googleChannelId) ? googleChannelId[0] : googleChannelId;
+  const resourceState = headers["x-goog-resource-state"] as string;
+  const resourceId = headers["x-goog-resource-id"] as string;
 
-    // "sync" fires immediately after watch registration
-    if (resourceState === "sync") {
-        console.log(`Drive webhook: sync ping received for channel ${channelId}, ignored`);
-        return;
+  if (resourceState === "sync") {
+    console.log(`Drive webhook: sync ping received for channel ${fullChannelId}, ignored`);
+    return;
+  }
+
+  if (!fullChannelId) {
+    console.warn("Drive webhook: missing channel ID in headers");
+    return;
+  }
+
+  try {
+    const mindmapperId = getMindmapperIdFromChannelId(fullChannelId);
+    const activeChannel = await getMindmapperWatch(mindmapperId);
+
+    if (!activeChannel) {
+      console.warn(`Drive webhook: received notification for unknown channel ${fullChannelId}`);
+      return;
     }
 
-    if (!channelId) {
-        console.warn(`Drive webhook: missing channel ID in headers`);
-        return;
+    if (activeChannel.channelId !== fullChannelId) {
+      console.warn(`Drive webhook: channel ID mismatch for ${fullChannelId}.`);
+      return;
     }
 
-    try {
-        // Because we set channelId = result._id.toString() earlier, we can use findById
-        const activeChannel = await Mindmapper.findById(channelId);
-
-        // Verify the channel exists in our database
-        if (!activeChannel) {
-            console.warn(`Drive webhook: received notification for unknown channel ${channelId}`);
-            return;
-        }
-
-        // Verify the resource ID matches what Google gave us during setup
-        if (activeChannel.resource_id && activeChannel.resource_id !== resourceId) {
-            console.warn(`Drive webhook: resource ID mismatch for channel ${channelId}. Possible spoofing attempt.`);
-            return;
-        }
-
-        console.log(`Drive webhook: change detected (state: ${resourceState}) for folder: ${activeChannel.folder_name}`);
-
-        await processNewFiles(activeChannel);
-
-    } catch (error) {
-        // Catch any database connection errors or invalid ID formats
-        console.error(`Drive webhook: Error querying database for channel ${channelId}`, error);
+    if (activeChannel.resourceId && activeChannel.resourceId !== resourceId) {
+      console.warn(`Drive webhook: resource ID mismatch for channel ${fullChannelId}. Possible spoofing attempt.`);
+      return;
     }
+
+    console.log(`Drive webhook: change detected (state: ${resourceState}) for folder: ${activeChannel.folderName}`);
+    await processNewFiles(activeChannel);
+  } catch (error) {
+    console.error(`Drive webhook: Error querying database for channel ${fullChannelId}`, error);
+  }
 }
 
 /**
  * Finds all Drive webhooks expiring within the next hour and refreshes them.
  * Returns a summary of the operation.
  */
-export async function processWebhookRefreshes() {
-    // Calculate the time window (Current time + 1 hour) in UTC
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-
-    // Find all active webhooks that expire before our 1-hour buffer
-    const expiringWatches = await Mindmapper.find({
-        status: "active",
-        expiration: { $lte: oneHourFromNow }
-    });
-
-    if (expiringWatches.length === 0) {
-        return "No webhooks need refreshing right now.";
+export async function processWebhookRefreshes(): Promise<
+  | string
+  | {
+      processed: number;
+      successes: number;
+      failures: number;
     }
+> {
+  const oneHourFromNow = Date.now() + 60 * 60 * 1000;
+  const expiringWatches = await listExpiringMindmapperWatches(oneHourFromNow);
 
-    // Loop through and refresh them
-    let successCount = 0;
-    let failCount = 0;
+  if (expiringWatches.length === 0) {
+    return "No webhooks need refreshing right now.";
+  }
 
-    for (const object of expiringWatches) {
-        const mindmapper_object: IMindmapper = object;
-        try {
-            const oauth2Client = await getUserOAuthClient(mindmapper_object.refresh_token);
+  let successCount = 0;
+  let failCount = 0;
 
-            if (!oauth2Client) {
-                throw new Error(`Could not find OAuth credentials for user ${mindmapper_object.user_id}`);
-            }
-
-            await refreshDriveWatch(mindmapper_object, oauth2Client);
-            successCount++;
-
-        } catch (refreshError) {
-            console.error(`[Webhook Cron] Failed to refresh webhook for ID ${mindmapper_object._id}:`, refreshError);
-            failCount++;
-        }
+  for (const mindmapperWatch of expiringWatches) {
+    try {
+      const userOAuthClient = await getUserOAuthClient(mindmapperWatch.refreshToken);
+      await refreshDriveWatch(mindmapperWatch, userOAuthClient);
+      successCount++;
+    } catch (refreshError) {
+      console.error(
+        `[Webhook Cron] Failed to refresh webhook for ID ${mindmapperWatch.mindmapperId}:`,
+        refreshError
+      );
+      failCount++;
     }
+  }
 
-    // Return the summary statistics
-    return {
-        processed: expiringWatches.length,
-        successes: successCount,
-        failures: failCount
-    };
+  return {
+    processed: expiringWatches.length,
+    successes: successCount,
+    failures: failCount,
+  };
 }
 
-export async function refreshDriveWatch(mindmapper_object: IMindmapper, oauth2Client: any) {
-    const drive = google.drive({ version: "v3", auth: oauth2Client });
+export async function refreshDriveWatch(
+  mindmapperWatch: MindmapperWatchRecord,
+  userOAuthClient: InstanceType<typeof google.auth.OAuth2>
+): Promise<void> {
+  const drive = google.drive({ version: "v3", auth: userOAuthClient });
+  const oldChannelId = mindmapperWatch.channelId;
 
-    const oldChannelId = mindmapper_object._id.toString();
-
-    try {
-        await drive.channels.stop({
-            requestBody: {
-                id: oldChannelId,
-                resourceId: mindmapper_object.resource_id,
-            }
-        });
-    } catch (error) {
-        // It is perfectly fine if this fails. The channel likely expired naturally.
-        console.log(`Old channel ${oldChannelId} could not be stopped (likely already expired).`);
-    }
-
-    // Create a NEW unique ID for Google by appending the current timestamp
-    const newChannelId = `${mindmapper_object._id.toString()}-${Date.now()}`;
-
-    const webhookBase = process.env.BACKEND_URL;
-    const webhookAddress = `${webhookBase}/api/mindmapper/google/drive-webhook`;
-
-    // Start the new watch using the saved page_token!
-    const watchRes = await drive.changes.watch({
-        pageToken: mindmapper_object.page_token,
-        requestBody: {
-            id: newChannelId,
-            type: "web_hook",
-            address: webhookAddress,
-        },
+  try {
+    await drive.channels.stop({
+      requestBody: {
+        id: oldChannelId,
+        resourceId: mindmapperWatch.resourceId,
+      },
     });
+  } catch {
+    console.log(`Old channel ${oldChannelId} could not be stopped (likely already expired).`);
+  }
 
-    const { resourceId, expiration } = watchRes.data;
-    if (!resourceId || !expiration) {
-        throw new Error("Drive watch did not respond to our refresh request");
-    }
+  const newChannelId = getChannelId(mindmapperWatch.mindmapperId);
+  const watchRes = await drive.changes.watch({
+    pageToken: mindmapperWatch.pageToken,
+    requestBody: {
+      id: newChannelId,
+      type: "web_hook",
+      address: getDriveWebhookAddress(),
+    },
+  });
+  const { resourceId, expiration } = watchRes.data;
 
-    const expirationDate = new Date(parseInt(expiration, 10));
+  if (!resourceId) {
+    throw new Error("Drive watch did not respond with a resource ID during refresh");
+  }
 
-    // Update the Mongoose document with the new Google properties
-    mindmapper_object.channel_id = newChannelId;
-    mindmapper_object.resource_id = resourceId;
-    mindmapper_object.expiration = expirationDate;
+  const expirationTimestamp = getExpirationTimestamp(expiration);
+  await saveMindmapperWatch({
+    ...mindmapperWatch,
+    channelId: newChannelId,
+    resourceId,
+    expiration: expirationTimestamp,
+    status: "active",
+  });
 
-    await mindmapper_object.save();
+  log.info(
+    `Drive watch refreshed, channel: ${newChannelId}, expires: ${new Date(expirationTimestamp).toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`
+  );
 }
