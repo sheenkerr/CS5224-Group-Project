@@ -30,6 +30,7 @@ import {
 } from "../data/applets";
 import { useUser, useAuth } from "@clerk/clerk-react";
 import Navigation from "../components/Navigation";
+import { getApiBaseUrl } from "../utils/apiBaseUrl";
 
 const categoryIcons: Record<string, React.ReactNode> = {
     apps: <AppsIcon />,
@@ -57,7 +58,7 @@ function Dashboard(): React.ReactElement | null {
             if (!userId) return;
             try {
                 const token = await getToken();
-                const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+                const baseUrl = getApiBaseUrl();
                 
                 const [actRes, notRes] = await Promise.all([
                     fetch(`${baseUrl}/api/user/activities`, {

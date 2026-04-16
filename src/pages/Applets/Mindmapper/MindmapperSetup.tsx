@@ -1,5 +1,4 @@
 import React from "react";
-import axios from "axios";
 import SetupPannel from "../../../components/SetupPannel";
 import { Dialog, Alert, Snackbar } from "@mui/material";
 import { useUser, useAuth } from "@clerk/clerk-react";
@@ -14,8 +13,6 @@ type SelectedFolder = {
 type MindmapperSetupProps = {
     stage: number;
 };
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8001").replace(/\/$/, "");
 
 /** Dynamically load a script tag if it hasn't been loaded yet for the google document selecter */
 function loadScript(src: string): Promise<void> {
