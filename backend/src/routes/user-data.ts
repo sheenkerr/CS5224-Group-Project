@@ -12,7 +12,7 @@ type ActivityRecord = {
   entity_type?: string;
   entity_id?: string;
   metadata?: Record<string, unknown>;
-  created_at: number;
+  created_at: number | string;
 };
 
 type NotificationRecord = {
@@ -23,14 +23,14 @@ type NotificationRecord = {
   is_read?: boolean;
   type?: string;
   link?: string;
-  created_at: number;
+  created_at: number | string;
 };
 
 function getUserId(req: unknown): string | undefined {
   return (req as any).userId;
 }
 
-function withSyntheticId<T extends { _id?: string; user_id: string; created_at: number }>(
+function withSyntheticId<T extends { _id?: string; user_id: string; created_at: number | string }>(
   record: T
 ): T & { _id: string } {
   return {

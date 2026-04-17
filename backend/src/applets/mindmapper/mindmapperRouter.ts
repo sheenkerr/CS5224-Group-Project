@@ -12,7 +12,13 @@ import {
   getMindMapsByWorkspace,
   renameWorkspace,
 } from "./graph";
-import { ExtractRequest, GraphEdge, GraphNode, MindMapRecord } from "./types";
+import {
+  notifyMindmapCreated,
+  notifyMindmapDeleted,
+  notifyMindmapExportedToNotion,
+  notifyMindmapsMerged,
+} from "./notifications";
+import { MindMapRecord } from "./types";
 import { processNewDocument } from "./processDocuments";
 import { v4 as uuidv4 } from "uuid";
 import { requireAuth } from "../../middlewares/auth";
@@ -111,6 +117,7 @@ router.post("/:mindmapperId/extract", async (req, res) => {
       userId, mindmapperId, documentId, documentName,
       graph, extractionPrompt || "key concepts", "completed"
     );
+    await notifyMindmapCreated(userId, mindmapperId, documentName);
     return res.status(200).json({ success: true, documentId, graph, record });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -173,6 +180,12 @@ router.post("/:mindmapperId/merge", async (req, res) => {
       "merged",
       "completed"
     );
+    await notifyMindmapsMerged(
+      userId,
+      mindmapperId,
+      record.documentName,
+      validRecords.length
+    );
 
     return res.status(200).json({ success: true, record });
   } catch (err: unknown) {
@@ -192,6 +205,7 @@ router.delete("/:mindmapperId/documents/:documentId", async (req, res) => {
 
   try {
     await deleteMindMap(userId, mindmapperId, documentId);
+    await notifyMindmapDeleted(userId, mindmapperId, documentId);
     return res.status(200).json({ success: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -292,12 +306,17 @@ router.post("/notion-token", async (req, res) => {
 
 // ── POST /api/mindmapper/export-notion ──────────────────────
 router.post("/export-notion", async (req, res) => {
+  const userId = (req as any).userId;
   const { documentId, documentName, graph, notionApiKey, exportPrompt } = req.body;
+  const mindmapperId =
+    typeof req.body.mindmapperId === "string" ? req.body.mindmapperId : "mindmapper";
+
   if (!documentId || !documentName || !graph || !notionApiKey) {
     return res.status(400).json({ success: false, error: "Missing required fields for Notion export." });
   }
   try {
     const pageId = await exportGraphToNotion(graph, documentName, notionApiKey, exportPrompt);
+    await notifyMindmapExportedToNotion(userId, mindmapperId, documentName, pageId);
     return res.status(200).json({ success: true, pageId });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

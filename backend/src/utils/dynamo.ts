@@ -1,11 +1,12 @@
+import "dotenv/config";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 const awsRegion = process.env.AWS_REGION ?? "ap-southeast-1";
 
-const client = new DynamoDBClient({ region: awsRegion });
+const dynamoClient = new DynamoDBClient({ region: awsRegion });
 
-export const dynamo = DynamoDBDocumentClient.from(client, {
+export const dynamo = DynamoDBDocumentClient.from(dynamoClient, {
   marshallOptions: {
     removeUndefinedValues: true,
   },

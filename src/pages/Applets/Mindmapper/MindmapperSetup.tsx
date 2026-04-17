@@ -14,6 +14,25 @@ type MindmapperSetupProps = {
     stage: number;
 };
 
+function getErrorMessage(error: unknown, fallback: string): string {
+    if (typeof error === "string" && error.trim()) {
+        return error;
+    }
+
+    if (error instanceof Error && error.message) {
+        return error.message;
+    }
+
+    if (error && typeof error === "object") {
+        const message = (error as { message?: unknown }).message;
+        if (typeof message === "string" && message.trim()) {
+            return message;
+        }
+    }
+
+    return fallback;
+}
+
 /** Dynamically load a script tag if it hasn't been loaded yet for the google document selecter */
 function loadScript(src: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -79,17 +98,19 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
                     window.location.href = "/applets/mindmappers";
                     return true;
                 } else {
-                    setSnackbarMessage(resultData.error || "Setup failed. Please try again.");
+                    setSnackbarMessage(getErrorMessage(resultData.error, "Setup failed. Please try again."));
                     setSnackbarOpen(true);
                     return false;
                 }
             } else {
-                setSnackbarMessage(data.error || "Setup failed. Please try again.");
+                setSnackbarMessage(getErrorMessage(data.error, "Setup failed. Please try again."));
                 setSnackbarOpen(true);
                 return false;
             }
         } catch (err: any) {
-            setSnackbarMessage(err?.response?.data?.error || err?.message || "An unexpected error occurred.");
+            setSnackbarMessage(
+                getErrorMessage(err?.response?.data?.error, err?.message || "An unexpected error occurred.")
+            );
             setSnackbarOpen(true);
             return false;
         }
@@ -101,10 +122,19 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     };
 
     const googleLogin = async () => {
-        const response = await apiFetch(`/api/mindmapper/google/login-url`);
-        const data = await response.json();
-        const authUrl = data.authUrl;
-        window.location.href = authUrl;
+        try {
+            const response = await apiFetch(`/api/mindmapper/google/login-url`);
+            const data = await response.json();
+
+            if (!response.ok || !data.authUrl) {
+                throw new Error(data.error || "Failed to fetch Google login URL.");
+            }
+
+            window.location.href = data.authUrl;
+        } catch (err: any) {
+            setSnackbarMessage(err?.message || "Could not start Google sign-in.");
+            setSnackbarOpen(true);
+        }
     };
 
     /** Open the Google Picker in folder-selection mode */

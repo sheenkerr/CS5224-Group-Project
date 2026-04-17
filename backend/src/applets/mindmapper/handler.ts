@@ -108,9 +108,10 @@ router.post("/setup-listener", async (req, res) => {
             mindmapperId: mindmapperId
         });
     } catch (err: any) {
-        log.error(`Failed to set up Drive watch: ${err.errors}`);
+        const message = err instanceof Error ? err.message : String(err);
+        log.error(`Failed to set up Drive watch: ${message}`);
         res.status(500).json({
-            error: err,
+            error: message,
             success: false
         });
     }

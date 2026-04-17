@@ -7,6 +7,8 @@ on:
     paths:
       - ".github/workflows/deploy.yml"
       - "backend/**"
+      - "backend/src/applets/mindmapper/**"
+      - "public/**"
       - "src/**"
       - "eslint.config.js"
       - "index.html"
@@ -42,9 +44,10 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'push'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Detect changed areas
         if: github.event_name == 'push'
@@ -55,7 +58,9 @@ jobs:
           filters: |
             frontend:
               - '.github/workflows/deploy.yml'
+              - 'public/**'
               - 'src/**'
+              - 'backend/src/applets/mindmapper/**'
               - 'eslint.config.js'
               - 'index.html'
               - 'package-lock.json'
@@ -84,17 +89,9 @@ jobs:
       ECS_CONTAINER_NAME: flowfox-api
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Validate AWS auth configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [[ -z "$AWS_ROLE_ARN" ]]; then
-            echo "::error::Missing AWS_ROLE_ARN. OIDC is required by this workflow."
-            exit 1
-          fi
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -109,13 +106,6 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set backend image URI
-        id: backend-image
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "image=${{ steps.login-ecr.outputs.registry }}/${ECR_BACKEND_REPOSITORY}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-
       - name: Build and push backend image
         uses: docker/build-push-action@v6
         with:
@@ -123,7 +113,7 @@ jobs:
           file: ./backend/Dockerfile.prod
           push: true
           tags: |
-            ${{ steps.backend-image.outputs.image }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}:${{ github.sha }}
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -134,7 +124,7 @@ jobs:
         with:
           task-definition-family: ${{ env.ECS_TASK_FAMILY }}
           container-name: ${{ env.ECS_CONTAINER_NAME }}
-          image: ${{ steps.backend-image.outputs.image }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}:${{ github.sha }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -155,33 +145,19 @@ jobs:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
       CF_DIST_ID: EFFBYWJSMTVJS
       S3_CDN_BUCKET: cdn-flowfox
+      FRONTEND_URL: https://flowfox.dev
       VITE_API_BASE_URL: https://api.flowfox.dev
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
     steps:
       - name: Checkout frontend files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: |
+            .
+            backend/src/applets/mindmapper
             public
             src
-            index.html
-            package-lock.json
-            package.json
-            tsconfig.app.json
-            tsconfig.json
-            tsconfig.node.json
-            vite.config.ts
-          sparse-checkout-cone-mode: false
-
-      - name: Validate AWS auth configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [[ -z "$AWS_ROLE_ARN" ]]; then
-            echo "::error::Missing AWS_ROLE_ARN. OIDC is required by this workflow."
-            exit 1
-          fi
+          persist-credentials: false
 
       - name: Configure AWS credentials with OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -220,11 +196,57 @@ jobs:
           VITE_API_URL: ${{ env.VITE_API_BASE_URL }}
         run: npm run build
 
+      - name: Record frontend build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > dist/deploy-info.json <<EOF
+          {
+            "commit": "${GITHUB_SHA}",
+            "run_id": "${GITHUB_RUN_ID}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          echo "Built assets:"
+          find dist/assets -maxdepth 1 -type f -printf '%f\n' | sort
+
       - name: Upload assets to S3
         run: aws s3 sync dist "s3://$S3_CDN_BUCKET" --delete --exclude "index.html" --cache-control "public,max-age=31536000,immutable"
 
       - name: Upload HTML shell
         run: aws s3 cp dist/index.html "s3://$S3_CDN_BUCKET/index.html" --cache-control "no-cache"
 
+      - name: Upload deploy metadata
+        run: aws s3 cp dist/deploy-info.json "s3://$S3_CDN_BUCKET/deploy-info.json" --cache-control "no-cache"
+
       - name: Invalidate CloudFront paths
-        run: aws cloudfront create-invalidation --distribution-id "$CF_DIST_ID" --paths "/*"
+        id: invalidate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          invalidation_id=$(aws cloudfront create-invalidation \
+            --distribution-id "$CF_DIST_ID" \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+
+          echo "id=$invalidation_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for CloudFront invalidation
+        run: aws cloudfront wait invalidation-completed --distribution-id "$CF_DIST_ID" --id "${{ steps.invalidate.outputs.id }}"
+
+      - name: Verify deployed frontend commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -fsSL "$FRONTEND_URL/deploy-info.json" -o deployed-info.json
+          deployed_commit=$(node -p "JSON.parse(require('fs').readFileSync('deployed-info.json', 'utf8')).commit")
+
+          if [[ "$deployed_commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::Deployed frontend commit mismatch. Expected $GITHUB_SHA but got $deployed_commit"
+            exit 1
+          fi

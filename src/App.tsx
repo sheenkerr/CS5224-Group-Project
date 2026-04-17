@@ -1,5 +1,10 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useNavigate,
+} from "react-router-dom";
 import { ClerkProvider, Show, RedirectToSignIn } from "@clerk/react";
 import LandingPage from "./pages/LandingPage";
 import Applets from "./pages/Applets";
@@ -18,17 +23,36 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => (
   </>
 );
 
-function App(): React.ReactElement {
+/**
+ * ClerkProviderWithRouting must be rendered INSIDE <Router> so it can
+ * access useNavigate(). Passing routerPush / routerReplace tells the
+ * Clerk SDK to use client-side navigation instead of window.location,
+ * which prevents the full-page reload that was causing duplicate
+ * verification emails.
+ */
+function ClerkProviderWithRouting({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+
   return (
     <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
+      routerPush={(to) => navigate(to)}
+      routerReplace={(to) => navigate(to, { replace: true })}
       afterSignOutUrl={import.meta.env.BASE_URL}
       signInUrl={`${import.meta.env.BASE_URL}login`}
       signUpUrl={`${import.meta.env.BASE_URL}register`}
       signInFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
       signUpFallbackRedirectUrl={`${import.meta.env.BASE_URL}dashboard`}
     >
-      <Router basename={import.meta.env.BASE_URL}>
+      {children}
+    </ClerkProvider>
+  );
+}
+
+function App(): React.ReactElement {
+  return (
+    <Router basename={import.meta.env.BASE_URL}>
+      <ClerkProviderWithRouting>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login/*" element={<Login />} />
@@ -66,8 +90,8 @@ function App(): React.ReactElement {
             }
           />
         </Routes>
-      </Router>
-    </ClerkProvider>
+      </ClerkProviderWithRouting>
+    </Router>
   );
 }
 
