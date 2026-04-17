@@ -101,10 +101,19 @@ function MindmapperSetup({ stage = 0 }: MindmapperSetupProps): React.ReactElemen
     };
 
     const googleLogin = async () => {
-        const response = await apiFetch(`/api/mindmapper/google/login-url`);
-        const data = await response.json();
-        const authUrl = data.authUrl;
-        window.location.href = authUrl;
+        try {
+            const response = await apiFetch(`/api/mindmapper/google/login-url`);
+            const data = await response.json();
+
+            if (!response.ok || !data.authUrl) {
+                throw new Error(data.error || "Failed to fetch Google login URL.");
+            }
+
+            window.location.href = data.authUrl;
+        } catch (err: any) {
+            setSnackbarMessage(err?.message || "Could not start Google sign-in.");
+            setSnackbarOpen(true);
+        }
     };
 
     /** Open the Google Picker in folder-selection mode */

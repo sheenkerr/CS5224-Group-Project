@@ -8,6 +8,7 @@ import {
   listExpiringMindmapperWatches,
   saveMindmapperWatch,
 } from "../googleWatchStore";
+import { notifyMindmapperConnected } from "../notifications";
 import { MindmapperWatchRecord } from "../types";
 
 const log = createLogger("Mindmapper");
@@ -149,6 +150,7 @@ export async function setupDriveWatch(
   };
 
   await saveMindmapperWatch(watchRecord);
+  await notifyMindmapperConnected(userId, mindmapperId, folderName);
 
   log.info(
     `Drive watch registered, channel: ${channelId}, expires: ${new Date(expirationTimestamp).toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`
