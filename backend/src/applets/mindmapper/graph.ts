@@ -116,18 +116,30 @@ export async function getMindMap(
 export async function getMindMapsByWorkspace(
   userId: string,
   mindmapperId: string
-): Promise<MindMapRecord[]> {
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: GRAPHS_TABLE,
-      KeyConditionExpression: "userId = :uid AND begins_with(mindmapperDocId, :prefix)",
-      ExpressionAttributeValues: {
-        ":uid": userId,
-        ":prefix": `${mindmapperId}#`,
-      },
-    })
-  );
-  return (result.Items as MindMapRecord[]) ?? [];
+): Promise<(MindMapRecord & { workspaceName: string })[]> {
+  const [records, workspaces] = await Promise.all([
+    dynamo.send(
+      new QueryCommand({
+        TableName: GRAPHS_TABLE,
+        KeyConditionExpression:
+          "userId = :uid AND begins_with(mindmapperDocId, :prefix)",
+        ExpressionAttributeValues: {
+          ":uid": userId,
+          ":prefix": `${mindmapperId}#`,
+        },
+      })
+    ),
+    getWorkspaces(userId),
+  ]);
+
+  const workspaceName =
+    workspaces.find((w) => w.mindmapperId === mindmapperId)?.name ??
+    mindmapperId;
+
+  return ((records.Items as MindMapRecord[]) ?? []).map((r) => ({
+    ...r,
+    workspaceName,
+  }));
 }
 
 export async function deleteMindMap(

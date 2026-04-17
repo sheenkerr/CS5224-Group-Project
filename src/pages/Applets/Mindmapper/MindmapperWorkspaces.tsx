@@ -6,6 +6,8 @@ import { useApi } from "../../../utils/api";
 import { Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloudIcon from "@mui/icons-material/Cloud";
+import EditIcon from "@mui/icons-material/Edit";
+import RenameModal from "../../../components/RenameModal";
 
 interface Workspace {
   mindmapperId: string;
@@ -21,49 +23,58 @@ interface WorkspaceCardProps {
 }
 
 function WorkspaceCard({ ws, index, onNavigate, onRename }: WorkspaceCardProps) {
-  const [editing, setEditing] = useState(false);
-  const [nameInput, setNameInput] = useState(ws.name);
+  const [renameOpen, setRenameOpen] = useState(false);
 
-  const handleRename = async () => {
-    if (!nameInput.trim() || nameInput === ws.name) {
-      setEditing(false);
+  const handleConfirmRename = async (newName: string) => {
+    if (!newName || newName === ws.name) {
+      setRenameOpen(false);
       return;
     }
-    await onRename(ws.mindmapperId, nameInput.trim());
-    setEditing(false);
+
+    await onRename(ws.mindmapperId, newName);
+    setRenameOpen(false);
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-      className="bg-white dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 p-5 hover:border-[#ff6b35]/50 transition cursor-pointer"
-      onClick={() => onNavigate(ws.mindmapperId)}
-    >
-      {editing ? (
-        <input
-          autoFocus
-          value={nameInput}
-          onChange={(e) => setNameInput(e.target.value)}
-          onBlur={handleRename}
-          onKeyDown={(e) => e.key === "Enter" && handleRename()}
-          onClick={(e) => e.stopPropagation()}
-          className="text-lg font-semibold w-full bg-transparent border-b border-[#ff6b35] outline-none text-gray-900 dark:text-white mb-1"
-        />
-      ) : (
-        <h3
-          className="text-lg font-semibold text-gray-900 dark:text-white mb-1"
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            setEditing(true);
-          }}
-        >
-          {ws.name}
-        </h3>
-      )}
-      <p className="text-xs text-gray-400 mt-1">Double-click name to rename</p>
-    </motion.div>
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.05 }}
+        className="bg-white dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 p-5 hover:border-[#ff6b35]/50 transition cursor-pointer"
+        onClick={() => onNavigate(ws.mindmapperId)}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 line-clamp-1">
+            {ws.name}
+          </h3>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setRenameOpen(true);
+            }}
+            className="text-gray-400 hover:text-[#ff6b35] transition"
+            title="Rename"
+          >
+            <EditIcon fontSize="small" />
+          </button>
+        </div>
+
+        {ws.createdAt && (
+          <p className="text-xs text-gray-400 mt-1">
+            Created {new Date(ws.createdAt).toLocaleString()}
+          </p>
+        )}
+      </motion.div>
+
+      <RenameModal
+        open={renameOpen}
+        initialValue={ws.name}
+        onCancel={() => setRenameOpen(false)}
+        onConfirm={handleConfirmRename}
+      />
+    </>
   );
 }
 
