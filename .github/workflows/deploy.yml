@@ -142,8 +142,7 @@ jobs:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
           service: ${{ env.ECS_BACKEND_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER_NAME }}
-          wait-for-service-stability: true
-          wait-max-delay-seconds: 15
+          wait-for-service-stability: false
 
   deploy-frontend:
     name: Build & Deploy Frontend
