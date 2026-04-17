@@ -42,9 +42,10 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'push'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Detect changed areas
         if: github.event_name == 'push'
@@ -84,7 +85,9 @@ jobs:
       ECS_CONTAINER_NAME: flowfox-api
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Validate AWS auth configuration
         shell: bash
@@ -155,23 +158,18 @@ jobs:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
       CF_DIST_ID: EFFBYWJSMTVJS
       S3_CDN_BUCKET: cdn-flowfox
+      FRONTEND_URL: https://flowfox.dev
       VITE_API_BASE_URL: https://api.flowfox.dev
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
     steps:
       - name: Checkout frontend files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: |
+            .
             public
             src
-            index.html
-            package-lock.json
-            package.json
-            tsconfig.app.json
-            tsconfig.json
-            tsconfig.node.json
-            vite.config.ts
-          sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Validate AWS auth configuration
         shell: bash
@@ -220,11 +218,57 @@ jobs:
           VITE_API_URL: ${{ env.VITE_API_BASE_URL }}
         run: npm run build
 
+      - name: Record frontend build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > dist/deploy-info.json <<EOF
+          {
+            "commit": "${GITHUB_SHA}",
+            "run_id": "${GITHUB_RUN_ID}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          echo "Built assets:"
+          find dist/assets -maxdepth 1 -type f -printf '%f\n' | sort
+
       - name: Upload assets to S3
         run: aws s3 sync dist "s3://$S3_CDN_BUCKET" --delete --exclude "index.html" --cache-control "public,max-age=31536000,immutable"
 
       - name: Upload HTML shell
         run: aws s3 cp dist/index.html "s3://$S3_CDN_BUCKET/index.html" --cache-control "no-cache"
 
+      - name: Upload deploy metadata
+        run: aws s3 cp dist/deploy-info.json "s3://$S3_CDN_BUCKET/deploy-info.json" --cache-control "no-cache"
+
       - name: Invalidate CloudFront paths
-        run: aws cloudfront create-invalidation --distribution-id "$CF_DIST_ID" --paths "/*"
+        id: invalidate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          invalidation_id=$(aws cloudfront create-invalidation \
+            --distribution-id "$CF_DIST_ID" \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+
+          echo "id=$invalidation_id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for CloudFront invalidation
+        run: aws cloudfront wait invalidation-completed --distribution-id "$CF_DIST_ID" --id "${{ steps.invalidate.outputs.id }}"
+
+      - name: Verify deployed frontend commit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -fsSL "$FRONTEND_URL/deploy-info.json" -o deployed-info.json
+          deployed_commit=$(node -p "JSON.parse(require('fs').readFileSync('deployed-info.json', 'utf8')).commit")
+
+          if [[ "$deployed_commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::Deployed frontend commit mismatch. Expected $GITHUB_SHA but got $deployed_commit"
+            exit 1
+          fi
