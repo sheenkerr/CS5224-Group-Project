@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
     TextField,
     InputAdornment,
-    Chip,
-    Switch,
     IconButton,
     Tooltip,
     Dialog,
@@ -16,16 +15,12 @@ import {
     Apps as AppsIcon,
     Add as AddIcon,
     Close as CloseIcon,
-    ArrowForward as ArrowForwardIcon,
     Speed as SpeedIcon,
     Share as ShareIcon,
     Groups as GroupsIcon,
     Code as CodeIcon,
     Notifications as NotificationsIcon,
     CloudSync as CloudSyncIcon,
-    Edit as EditIcon,
-    ContentCopy as CloneIcon,
-    Delete as DeleteIcon,
 } from "@mui/icons-material";
 import {
     applets as initialApplets,
@@ -33,6 +28,7 @@ import {
     categories,
     type Applet,
 } from "../data/applets";
+import AppletCard from "../components/AppletCard";
 import FlowBuilder from "../components/FlowBuilder";
 import Navigation from "../components/Navigation";
 import { renderServiceIcon } from "../utils/icons";
@@ -54,6 +50,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
 };
 
 function Applets(): React.ReactElement {
+    const navigate = useNavigate();
     const [applets, setApplets] = useState<Applet[]>(initialApplets);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
@@ -144,6 +141,17 @@ function Applets(): React.ReactElement {
         setIsBuilderOpen(false);
     }, []);
 
+    function getAppletRoute(applet: Applet): string {
+        if (applet.name === "Mindmappers") {
+            return `/applets/mindmappers`;
+        }
+        return `/applets/${applet.name}`;
+    }
+
+    function handleAppletClick(applet: Applet): void {
+        navigate(getAppletRoute(applet));
+    }
+
     function getCategoryButtonClass(isSelected: boolean): string {
         if (isSelected) {
             return "transition-colors border text-white! border-[#ff6b35]! bg-[#ff6b35]!";
@@ -199,135 +207,7 @@ function Applets(): React.ReactElement {
         );
     }
 
-    function renderAppletCard(applet: Applet, index: number): React.ReactElement {
-        return (
-            <motion.div
-                key={applet.id}
-                layout
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden hover:border-[#ff6b35]/50 dark:hover:border-[#ff6b35]/50 transition-colors group shadow-sm dark:shadow-none"
-            >
-                <div className="p-5">
-                    <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                            <div
-                                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                                style={{ backgroundColor: `${applet.trigger.color}20` }}
-                            >
-                                {renderServiceIcon(applet.trigger.icon, applet.trigger.color, "1.5rem")}
-                            </div>
 
-                            <div className="text-gray-400 dark:text-gray-500 transition-colors">
-                                <ArrowForwardIcon />
-                            </div>
-
-                            {applet.actions.map(function (action, i) {
-                                return (
-                                    <div
-                                        key={i}
-                                        className="w-12 h-12 rounded-xl flex items-center justify-center"
-                                        style={{ backgroundColor: `${action.color}20` }}
-                                    >
-                                        {renderServiceIcon(action.icon, action.color, "1.5rem")}
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        <Tooltip title={applet.enabled ? "Disable" : "Enable"}>
-                            <Switch
-                                checked={applet.enabled}
-                                onChange={function () {
-                                    toggleApplet(applet.id);
-                                }}
-                                size="small"
-                                sx={{
-                                    "& .MuiSwitch-switchBase.Mui-checked": {
-                                        color: "#10b981",
-                                    },
-                                    "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-                                        backgroundColor: "#10b981",
-                                    },
-                                }}
-                            />
-                        </Tooltip>
-                    </div>
-
-                    <h3 className="text-gray-900 dark:text-white font-semibold mb-2 group-hover:text-[#ff6b35] dark:group-hover:text-[#ff6b35] transition-colors">
-                        {applet.name}
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-4 transition-colors">
-                        {applet.description}
-                    </p>
-
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {applet.tags.slice(0, 3).map(function (tag) {
-                            return (
-                                <Chip
-                                    key={tag}
-                                    label={tag}
-                                    size="small"
-                                    sx={{
-                                        backgroundColor: "rgba(255, 107, 53, 0.1)",
-                                        color: "#ff6b35",
-                                        fontSize: "0.7rem",
-                                        height: "24px",
-                                    }}
-                                />
-                            );
-                        })}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-white/10 transition-colors">
-                        <span className="text-xs text-gray-500">
-                            {applet.users.toLocaleString()} users
-                        </span>
-                        <div className="flex gap-1">
-                            <Tooltip title="Edit">
-                                <IconButton
-                                    size="small"
-                                    onClick={function () {
-                                        openBuilder(applet);
-                                    }}
-                                    sx={{ color: "gray" }}
-                                >
-                                    <EditIcon fontSize="small" />
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Clone">
-                                <IconButton
-                                    size="small"
-                                    onClick={function () {
-                                        cloneApplet(applet);
-                                    }}
-                                    sx={{ color: "gray" }}
-                                >
-                                    <CloneIcon fontSize="small" />
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete">
-                                <IconButton
-                                    size="small"
-                                    onClick={function () {
-                                        deleteApplet(applet.id);
-                                    }}
-                                    sx={{
-                                        color: "gray",
-                                        "&:hover": { color: "#ef4444" },
-                                    }}
-                                >
-                                    <DeleteIcon fontSize="small" />
-                                </IconButton>
-                            </Tooltip>
-                        </div>
-                    </div>
-                </div>
-            </motion.div>
-        );
-    }
 
     function renderEmptyState(): React.ReactElement {
         return (
@@ -438,7 +318,19 @@ function Applets(): React.ReactElement {
                     className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                 >
                     <AnimatePresence mode="popLayout">
-                        {filteredApplets.map(renderAppletCard)}
+                        {filteredApplets.map((applet, index) => (
+                            <AppletCard
+                                key={applet.id}
+                                applet={applet}
+                                index={index}
+                                showControls={true}
+                                onToggle={toggleApplet}
+                                onEdit={openBuilder}
+                                onClone={cloneApplet}
+                                onDelete={deleteApplet}
+                                onClick={handleAppletClick}
+                            />
+                        ))}
                     </AnimatePresence>
                 </motion.div>
 
