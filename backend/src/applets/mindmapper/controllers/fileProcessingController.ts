@@ -16,13 +16,6 @@ function getAwsRegion(): string {
 	return region;
 }
 
-function getBackendInternalUrl(): string {
-	const backendPort = process.env.BACKEND_PORT ?? process.env.PORT ?? "4001";
-	return (
-		process.env.BACKEND_INTERNAL_URL ?? `http://127.0.0.1:${backendPort}`
-	).replace(/\/$/, "");
-}
-
 function getS3BucketName(): string {
 	const bucketName = process.env.S3_BUCKET_NAME;
 	if (!bucketName) {
@@ -101,14 +94,20 @@ export async function transferDriveFileToS3(
 	const s3Client = new S3Client({
 		region: getAwsRegion(),
 	});
+	const backendPort = process.env.BACKEND_PORT ?? process.env.PORT ?? "4001";
+	const webhookBaseUrl = process.env.GOOGLE_WEBHOOK_BASE_URL;
+	const bucketName = getS3BucketName();
+	const objectKey = `mindmappers/${userId}/${mindmapperId}/${fileName}`;
+
+	if (!webhookBaseUrl) {
+		throw new Error("Missing GOOGLE_WEBHOOK_BASE_URL in environment variables");
+	}
 
 	try {
 		const driveResponse = await drive.files.get(
 			{ fileId, alt: "media" },
 			{ responseType: "stream" },
 		);
-		const bucketName = getS3BucketName();
-		const objectKey = `mindmappers/${userId}/${mindmapperId}/${fileName}`;
 		const upload = new Upload({
 			client: s3Client,
 			params: {
@@ -126,18 +125,26 @@ export async function transferDriveFileToS3(
 
 		await upload.done();
 		console.log(`Successfully transferred ${fileName} to S3!`);
-
-		await axios.post(`${getBackendInternalUrl()}/api/mindmapper/s3-webhook`, {
-			bucketName,
-			objectKey,
-			mindmapperAppletId: mindmapperId,
-		});
-
-		return true;
 	} catch (error) {
 		console.error(`Failed to transfer ${fileName} to S3:`, error);
 		throw error;
 	}
+
+	try {
+		await axios.post(
+			`${webhookBaseUrl.replace(/\/$/, "")}:${backendPort}/api/mindmapper/s3-webhook`,
+			{
+			bucketName,
+			objectKey,
+			mindmapperAppletId: mindmapperId,
+			},
+		);
+	} catch (error) {
+		console.error(`Uploaded ${fileName} to S3, but failed to trigger s3-webhook:`, error);
+		throw error;
+	}
+
+	return true;
 }
 
 async function triggerEmail(

@@ -18,6 +18,31 @@ import { requireAuth } from "../../middlewares/auth";
 import axios from "axios";
 
 const router = Router();
+
+// Internal callback used by the backend after a successful S3 upload.
+// It cannot present a Clerk session, so it must remain outside requireAuth.
+// ── POST /api/mindmapper/s3-webhook ─────────────────────────
+// objectKey format: mindmappers/{userId}/{mindmapperId}/{filename}.pdf
+router.post("/s3-webhook", async (req, res) => {
+  res.sendStatus(200);
+  try {
+    const { bucketName, objectKey } = req.body;
+    const parts = objectKey.split("/");
+    if (parts.length < 4) {
+      console.error("Invalid S3 key format (expected mindmappers/userId/mindmapperId/file.pdf):", objectKey);
+      return;
+    }
+    const userId = parts[1];
+    const mindmapperId = parts[2];
+    const fileName = parts[3];
+    const documentId = fileName.replace(".pdf", "");
+
+    processNewDocument(bucketName, objectKey, userId, mindmapperId, documentId).catch(console.error);
+  } catch (err) {
+    console.error("Webhook error:", err);
+  }
+});
+
 router.use(requireAuth);
 
 router.get("/", async (req, res) => {
@@ -152,28 +177,6 @@ router.delete("/:mindmapperId/documents/:documentId", async (req, res) => {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Delete failed:", message);
     return res.status(500).json({ success: false, error: message });
-  }
-});
-
-// ── POST /api/mindmapper/s3-webhook ─────────────────────────
-// objectKey format: mindmappers/{userId}/{mindmapperId}/{filename}.pdf
-router.post("/s3-webhook", async (req, res) => {
-  res.sendStatus(200);
-  try {
-    const { bucketName, objectKey } = req.body;
-    const parts = objectKey.split("/");
-    if (parts.length < 4) {
-      console.error("Invalid S3 key format (expected mindmappers/userId/mindmapperId/file.pdf):", objectKey);
-      return;
-    }
-    const userId = parts[1];
-    const mindmapperId = parts[2];
-    const fileName = parts[3];
-    const documentId = fileName.replace(".pdf", "");
-
-    processNewDocument(bucketName, objectKey, userId, mindmapperId, documentId).catch(console.error);
-  } catch (err) {
-    console.error("Webhook error:", err);
   }
 });
 
