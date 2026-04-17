@@ -146,10 +146,8 @@ jobs:
 
   deploy-frontend:
     name: Build & Deploy Frontend
-    needs:
-      - changes
-      - deploy-backend
-    if: ${{ always() && needs.changes.outputs.frontend == 'true' && (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped') }}
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     environment: production
     env:
