@@ -5,6 +5,7 @@ import { Upload } from "@aws-sdk/lib-storage";
 import { getUserOAuthClient } from "../controllers/googleController";
 import { saveMindmapperWatch } from "../googleWatchStore";
 import { MindmapperWatchRecord } from "../types";
+import { processNewDocument } from "../processDocuments";
 
 function getAwsRegion(): string {
 	const region = process.env.AWS_REGION;
@@ -94,14 +95,9 @@ export async function transferDriveFileToS3(
 	const s3Client = new S3Client({
 		region: getAwsRegion(),
 	});
-	const backendPort = process.env.BACKEND_PORT ?? process.env.PORT ?? "4001";
-	const webhookBaseUrl = process.env.GOOGLE_WEBHOOK_BASE_URL;
 	const bucketName = getS3BucketName();
 	const objectKey = `mindmappers/${userId}/${mindmapperId}/${fileName}`;
-
-	if (!webhookBaseUrl) {
-		throw new Error("Missing GOOGLE_WEBHOOK_BASE_URL in environment variables");
-	}
+	const documentId = fileName.replace(".pdf", "");
 
 	try {
 		const driveResponse = await drive.files.get(
@@ -130,19 +126,15 @@ export async function transferDriveFileToS3(
 		throw error;
 	}
 
-	try {
-		await axios.post(
-			`${webhookBaseUrl.replace(/\/$/, "")}:${backendPort}/api/mindmapper/s3-webhook`,
-			{
-			bucketName,
-			objectKey,
-			mindmapperAppletId: mindmapperId,
-			},
-		);
-	} catch (error) {
-		console.error(`Uploaded ${fileName} to S3, but failed to trigger s3-webhook:`, error);
-		throw error;
-	}
+	processNewDocument(
+		bucketName,
+		objectKey,
+		userId,
+		mindmapperId,
+		documentId,
+	).catch((error) => {
+		console.error(`Uploaded ${fileName} to S3, but failed to process document:`, error);
+	});
 
 	return true;
 }
