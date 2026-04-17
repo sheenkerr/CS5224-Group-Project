@@ -75,7 +75,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      AWS_PAGER: ""
       AWS_REGION: us-east-2
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
       ECR_BACKEND_REPOSITORY: flowfox
@@ -155,7 +154,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      AWS_PAGER: ""
       AWS_REGION: us-east-2
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
       CF_DIST_ID: EFFBYWJSMTVJS
