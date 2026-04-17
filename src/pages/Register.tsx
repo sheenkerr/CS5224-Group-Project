@@ -1,5 +1,5 @@
 import React from "react";
-import { SignUp } from "@clerk/clerk-react";
+import { SignUp } from "@clerk/react";
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
 import Logo from "../components/Logo";

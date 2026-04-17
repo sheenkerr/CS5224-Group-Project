@@ -28,7 +28,7 @@ import {
     categories,
     type Applet,
 } from "../data/applets";
-import { useUser, useAuth } from "@clerk/clerk-react";
+import { useUser, useAuth } from "@clerk/react";
 import Navigation from "../components/Navigation";
 import { getApiBaseUrl } from "../utils/apiBaseUrl";
 

@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { ClerkProvider, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
+import { ClerkProvider, Show, RedirectToSignIn } from "@clerk/react";
 import LandingPage from "./pages/LandingPage";
 import Applets from "./pages/Applets";
 import Login from "./pages/Login";
@@ -13,8 +13,8 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => (
   <>
-    <SignedIn>{children}</SignedIn>
-    <SignedOut><RedirectToSignIn /></SignedOut>
+    <Show when="signed-in">{children}</Show>
+    <Show when="signed-out"><RedirectToSignIn /></Show>
   </>
 );
 

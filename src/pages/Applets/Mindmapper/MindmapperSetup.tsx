@@ -1,7 +1,7 @@
 import React from "react";
 import SetupPannel from "../../../components/SetupPannel";
 import { Dialog, Alert, Snackbar } from "@mui/material";
-import { useUser, useAuth } from "@clerk/clerk-react";
+import { useUser, useAuth } from "@clerk/react";
 import { useApi } from "../../../utils/api";
 
 /** Shape of the folder selected by the Google Picker */

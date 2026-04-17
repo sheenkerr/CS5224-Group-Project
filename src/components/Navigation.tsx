@@ -7,7 +7,7 @@ import {
     LightMode as LightModeIcon,
     DarkMode as DarkModeIcon,
 } from "@mui/icons-material";
-import { useUser, UserButton } from "@clerk/clerk-react";
+import { useUser, UserButton } from "@clerk/react";
 import { FoxIcon as FoxLogo } from "./Logo";
 import { IconButton } from "@mui/material";
 import { useTheme } from "../context/ThemeContext";
