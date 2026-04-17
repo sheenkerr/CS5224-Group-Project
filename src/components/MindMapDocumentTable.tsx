@@ -87,7 +87,7 @@ export default function MindMapDocumentTable({ tab, mindmapperId, onViewSingle, 
               }}
               className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
             >
-              🔗 Merge {selected.size} docs
+              🔗 Merge docs
             </button>
           )}
         </div>

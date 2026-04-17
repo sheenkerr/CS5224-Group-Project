@@ -5,7 +5,8 @@ import {
   GetCommand,
   QueryCommand,
   DeleteCommand,
-  ScanCommand
+  ScanCommand,
+  UpdateCommand
 } from "@aws-sdk/lib-dynamodb";
 import Groq from "groq-sdk";
 import { MindMap, MindMapRecord, MindMapWorkspace, GraphNode, GraphEdge } from "./types";
@@ -25,13 +26,34 @@ export async function createWorkspace(
   userId: string,
   mindmapperId: string,
 ): Promise<MindMapWorkspace> {
+  // Auto-generate name based on existing workspace count
+  const existing = await getWorkspaces(userId);
+  const name = `Workspace-${existing.length + 1}`;
+
   const workspace: MindMapWorkspace = {
     userId,
     mindmapperId,
+    name,
     createdAt: Date.now(),
   };
   await dynamo.send(new PutCommand({ TableName: WORKSPACES_TABLE, Item: workspace }));
   return workspace;
+}
+
+export async function renameWorkspace(
+  userId: string,
+  mindmapperId: string,
+  name: string,
+): Promise<void> {
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: WORKSPACES_TABLE,
+      Key: { userId, mindmapperId },
+      UpdateExpression: "SET #n = :name",
+      ExpressionAttributeNames: { "#n": "name" }, // "name" is a reserved word in DynamoDB
+      ExpressionAttributeValues: { ":name": name },
+    })
+  );
 }
 
 export async function getWorkspaces(userId: string): Promise<MindMapWorkspace[]> {
@@ -94,18 +116,30 @@ export async function getMindMap(
 export async function getMindMapsByWorkspace(
   userId: string,
   mindmapperId: string
-): Promise<MindMapRecord[]> {
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: GRAPHS_TABLE,
-      KeyConditionExpression: "userId = :uid AND begins_with(mindmapperDocId, :prefix)",
-      ExpressionAttributeValues: {
-        ":uid": userId,
-        ":prefix": `${mindmapperId}#`,
-      },
-    })
-  );
-  return (result.Items as MindMapRecord[]) ?? [];
+): Promise<(MindMapRecord & { workspaceName: string })[]> {
+  const [records, workspaces] = await Promise.all([
+    dynamo.send(
+      new QueryCommand({
+        TableName: GRAPHS_TABLE,
+        KeyConditionExpression:
+          "userId = :uid AND begins_with(mindmapperDocId, :prefix)",
+        ExpressionAttributeValues: {
+          ":uid": userId,
+          ":prefix": `${mindmapperId}#`,
+        },
+      })
+    ),
+    getWorkspaces(userId),
+  ]);
+
+  const workspaceName =
+    workspaces.find((w) => w.mindmapperId === mindmapperId)?.name ??
+    mindmapperId;
+
+  return ((records.Items as MindMapRecord[]) ?? []).map((r) => ({
+    ...r,
+    workspaceName,
+  }));
 }
 
 export async function deleteMindMap(
