@@ -1,8 +1,12 @@
-import * as pdfParseModule from "pdf-parse";
-
-const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
+import { PDFParse } from "pdf-parse";
 
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  const data = await pdfParse(pdfBuffer);
-  return data.text;
+  const parser = new PDFParse({ data: pdfBuffer });
+
+  try {
+    const result = await parser.getText();
+    return result.text;
+  } finally {
+    await parser.destroy();
+  }
 }
