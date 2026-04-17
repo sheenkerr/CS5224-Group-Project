@@ -103,12 +103,10 @@ export async function transferDriveFileToS3(
 	});
 
 	try {
-		console.log("INTO DRIVE", drive);
 		const driveResponse = await drive.files.get(
 			{ fileId, alt: "media" },
 			{ responseType: "stream" },
 		);
-		console.log("S3 S3", s3Client, driveResponse);
 		const bucketName = getS3BucketName();
 		const objectKey = `mindmappers/${userId}/${mindmapperId}/${fileName}`;
 		const upload = new Upload({
