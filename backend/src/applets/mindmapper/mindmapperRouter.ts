@@ -14,6 +14,7 @@ import {
 import {
   notifyMindmapCreated,
   notifyMindmapDeleted,
+  notifyMindmapExportedToNotion,
   notifyMindmapsMerged,
 } from "./notifications";
 import { MindMapRecord } from "./types";
@@ -285,12 +286,17 @@ router.post("/notion-token", async (req, res) => {
 
 // ── POST /api/mindmapper/export-notion ──────────────────────
 router.post("/export-notion", async (req, res) => {
+  const userId = (req as any).userId;
   const { documentId, documentName, graph, notionApiKey, exportPrompt } = req.body;
+  const mindmapperId =
+    typeof req.body.mindmapperId === "string" ? req.body.mindmapperId : "mindmapper";
+
   if (!documentId || !documentName || !graph || !notionApiKey) {
     return res.status(400).json({ success: false, error: "Missing required fields for Notion export." });
   }
   try {
     const pageId = await exportGraphToNotion(graph, documentName, notionApiKey, exportPrompt);
+    await notifyMindmapExportedToNotion(userId, mindmapperId, documentName, pageId);
     return res.status(200).json({ success: true, pageId });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

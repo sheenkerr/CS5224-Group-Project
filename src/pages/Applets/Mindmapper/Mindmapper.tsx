@@ -204,6 +204,7 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
       const res = await apiFetch(`/api/mindmapper/export-notion`, {
         method: "POST",
         body: JSON.stringify({
+          mindmapperId,
           documentId: `doc-${Date.now()}`,
           documentName: viewMode === "merged" ? "All Documents Merged" : (activeDocumentName || extractName),
           graph: activeGraph,
