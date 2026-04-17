@@ -10,6 +10,7 @@ import {
   createWorkspace,
   getWorkspaces,
   getMindMapsByWorkspace,
+  renameWorkspace,
 } from "./graph";
 import { ExtractRequest, GraphEdge, GraphNode, MindMapRecord } from "./types";
 import { processNewDocument } from "./processDocuments";
@@ -73,6 +74,25 @@ router.get("/workspaces", async (req, res) => {
   try {
     const workspaces = await getWorkspaces(userId);
     return res.status(200).json({ success: true, workspaces });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+// ── PATCH /api/mindmapper/:mindmapperId/rename ───────────────
+router.patch("/:mindmapperId/rename", async (req, res) => {
+  const userId = (req as any).userId;
+  const { mindmapperId } = req.params;
+  const { name } = req.body;
+
+  if (!name?.trim()) {
+    return res.status(400).json({ success: false, error: "Missing name" });
+  }
+
+  try {
+    await renameWorkspace(userId, mindmapperId, name.trim());
+    return res.status(200).json({ success: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return res.status(500).json({ success: false, error: message });

@@ -1,6 +1,7 @@
 export interface MindMapWorkspace {
   userId: string;
   mindmapperId: string;
+  name: string;
   createdAt: number;
 }
 

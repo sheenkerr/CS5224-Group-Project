@@ -124,33 +124,45 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
     }
   }, [apiFetch, stage]);
 
-  const handleExtract = async () => {
-    if (!extractText.trim()) {
-      setError("Please paste some document text first.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setGraph(null);
-    try {
-      const res = await apiFetch(`/api/mindmapper/${mindmapperId}/extract`, {
-        method: "POST",
-        body: JSON.stringify({
-          documentId: `doc-${Date.now()}`,
-          documentName: extractName,
-          documentText: extractText,
-          extractionPrompt,
-        }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Extraction failed.");
-      setGraph(data.graph);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setLoading(false);
-    }
-  };
+const handleExtract = async () => {
+  if (!extractText.trim()) {
+    setError("Please paste some document text first.");
+    return;
+  }
+
+  setLoading(true);
+  setError(null);
+  setGraph(null);
+
+  try {
+    const res = await apiFetch(`/api/mindmapper/${mindmapperId}/extract`, {
+      method: "POST",
+      body: JSON.stringify({
+        documentId: `doc-${Date.now()}`,
+        documentName: extractName,
+        documentText: extractText,
+        extractionPrompt,
+      }),
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Extraction failed.");
+
+    // ✅ FIX: reset view state properly
+    setGraph(data.graph);
+    setMergedGraph(null);
+    setViewMode("single");
+    setActiveDocumentName(extractName); 
+    setExtractText("");
+    setExtractName("");
+    setExtractionPrompt("key concepts and how they relate to each other");      
+
+  } catch (err: unknown) {
+    setError(err instanceof Error ? err.message : "Something went wrong.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleMergeSelected = async (records: MindMapRecord[]): Promise<MindMapRecord | null> => {
     if (!records.length) return null;
@@ -351,11 +363,7 @@ function Mindmapper({ isSetup = false }: MindmapperProps): React.ReactElement {
                 : `${activeDocumentName || extractName}-${graph?.nodes.length}`
             }
             graph={viewMode === "merged" && mergedGraph ? mergedGraph : graph!}
-            documentName={
-              viewMode === "merged"
-                ? "All Documents — Merged View"
-                : activeDocumentName || extractName
-            }
+            documentName={activeDocumentName || extractName}
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 gap-3">
